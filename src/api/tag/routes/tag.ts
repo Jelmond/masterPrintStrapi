@@ -1,7 +1,12 @@
-/**
- * tag router
- */
-
-import { factories } from '@strapi/strapi';
-
-export default factories.createCoreRouter('api::tag.tag');
+export default {
+    routes: [
+      {
+        method: "GET",
+        path: "/getTagsForCategory/:id",
+        handler: "get-tags-for-category.getTagsForCategory",
+        // config: {
+        //   policies: ["global::is-authenticated"],
+        // },
+      },
+    ],
+  };

@@ -1,7 +1,12 @@
-/**
- * product router
- */
-
-import { factories } from '@strapi/strapi';
-
-export default factories.createCoreRouter('api::product.product');
+export default {
+    routes: [
+      {
+        method: "GET",
+        path: "/getSimilarProducts/:id",
+        handler: "get-similar-products.getSimilarProducts",
+        // config: {
+        //   policies: ["global::is-authenticated"],
+        // },
+      },
+    ],
+  };

@@ -1,7 +1,12 @@
-/**
- * category router
- */
-
-import { factories } from '@strapi/strapi';
-
-export default factories.createCoreRouter('api::category.category');
+export default {
+    routes: [
+      {
+        method: "GET",
+        path: "/getPopulatedCategory/:id",
+        handler: "get-populated-category.getPopulatedCategory",
+        // config: {
+        //   policies: ["global::is-authenticated"],
+        // },
+      },
+    ],
+  };
