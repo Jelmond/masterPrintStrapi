@@ -16,10 +16,10 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.9
         with:
-          host: ${{ secrets.PRINT_HOST }}
-          username: ${{ secrets.PRINT_USER }}
-          key: ${{ secrets.PRINT_KEY }}
-          port: ${{ secrets.PRINT_PORT }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
           script: |
             # Navigate to project directory
             cd /home/print/masterPrintStrapi
