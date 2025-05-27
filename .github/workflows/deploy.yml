@@ -3,7 +3,7 @@ name: Deploy MasterPrintStrapi
 on:
   push:
     branches:
-      - main    # trigger deployment on main branch
+      - main
 
 jobs:
   deploy:
@@ -16,10 +16,10 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.9
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          port: ${{ secrets.DEPLOY_PORT }}
+          host: ${{ secrets.PRINT_HOST }}
+          username: ${{ secrets.PRINT_USER }}
+          key: ${{ secrets.PRINT_KEY }}
+          port: ${{ secrets.PRINT_PORT }}
           script: |
             # Navigate to project directory
             cd /home/print/masterPrintStrapi
@@ -30,11 +30,14 @@ jobs:
             # Install or update dependencies
             npm install
 
-            # Increase memory for build process
+            # Increase memory for the build process
             export NODE_OPTIONS="--max-old-space-size=4096"
 
             # Build Strapi admin panel if needed
             npm run build
+
+            # Add nvm-installed PM2 to PATH
+            export PATH="/home/print/.nvm/versions/node/v18.20.7/bin:$PATH"
 
             # Restart or start the app with pm2 under the name print_dev
             pm2 restart print_dev || pm2 start npm --name print_dev -- start
