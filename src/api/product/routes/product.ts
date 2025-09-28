@@ -8,5 +8,14 @@ export default {
         //   policies: ["global::is-authenticated"],
         // },
       },
+      {
+        method: "GET",
+        path: "/search",
+        handler: "search.search",
+        config: {
+          policies: [],
+          middlewares: [],
+        },
+      },
     ],
   };
