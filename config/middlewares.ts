@@ -5,7 +5,7 @@ export default [
     name: 'strapi::cors',
     config: {
       enabled: true,
-      origin: ['http://localhost:3000'], // Add your Next.js app URL
+      origin: ['http://localhost:3000', 'https://mppshop.by', 'https://mppshop.by.'], // Add your Next.js app URL
       headers: ['*'],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
     },
