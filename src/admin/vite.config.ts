@@ -10,7 +10,7 @@ export default (config: UserConfig) => {
     },
     server: {
       // Allow requests from this host
-      allowedHosts: ['mppshop.by', 'mppshop.by.', 'api.mppshop-by'],
+      allowedHosts: ['mppshop.by', 'mppshop.by.', 'api.mppshop.by'],
     },
   });
 };
