@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "designers",
+  "info": {
+    "singularName": "designer",
+    "pluralName": "designers",
+    "displayName": "Designer"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "name": {
+      "type": "string"
+    }
+  }
+}

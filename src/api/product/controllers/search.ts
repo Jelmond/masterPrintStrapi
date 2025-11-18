@@ -30,7 +30,10 @@ export default {
             populate: {
               images: true,
               categories: true,
-              tags: true
+              tags: true,
+              batch: true,
+              designers: true,
+              polishes: true
             }
           }
         }
@@ -60,7 +63,10 @@ export default {
         populate: {
           images: true,
           categories: true,
-          tags: true
+          tags: true,
+          batch: true,
+          designers: true,
+          polishes: true
         }
       });
 
@@ -75,7 +81,10 @@ export default {
           products: {
             populate: {
               images: true,
-              categories: true
+              categories: true,
+              batch: true,
+              designers: true,
+              polishes: true
             }
           }
         }
@@ -93,7 +102,10 @@ export default {
         populate: {
           images: true,
           categories: true,
-          tags: true
+          tags: true,
+          batch: true,
+          designers: true,
+          polishes: true
         }
       });
 

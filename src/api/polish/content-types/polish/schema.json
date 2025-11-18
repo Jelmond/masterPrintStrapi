@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "polishes",
+  "info": {
+    "singularName": "polish",
+    "pluralName": "polishes",
+    "displayName": "Polish"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "name": {
+      "type": "string"
+    }
+  }
+}

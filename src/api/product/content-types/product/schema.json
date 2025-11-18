@@ -66,6 +66,24 @@
       "relation": "manyToMany",
       "target": "api::tag.tag",
       "mappedBy": "products"
+    },
+    "isBestseller": {
+      "type": "boolean"
+    },
+    "polishes": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::polish.polish"
+    },
+    "designers": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::designer.designer"
+    },
+    "batch": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::batch.batch"
     }
   }
 }

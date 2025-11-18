@@ -11,7 +11,7 @@ export default {
 
             const products = await strapi.db.query('api::product.product').findMany({
                 where: { publishedAt: { $notNull: true } },
-                populate: { images: true, categories: true, tags: true }
+                populate: { images: true, categories: true, tags: true, batch: true, designers: true, polishes: true }
             });
 
             console.log('Products found:', products.length);
@@ -88,7 +88,10 @@ export default {
             populate: {
                 images: true,
                 categories: true,
-                tags: true
+                tags: true,
+                batch: true,
+                designers: true,
+                polishes: true
             }
         });
 
