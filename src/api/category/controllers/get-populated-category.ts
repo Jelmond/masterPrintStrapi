@@ -10,7 +10,7 @@
       where: { id },
       populate: {
         products: {
-          populate: ['images', 'category', 'tags']
+          populate: ['images', 'category', 'tags', 'batch', 'designers', 'polishes']
         }
       }
     });

@@ -82,6 +82,7 @@ export default {
             populate: {
               images: true,
               categories: true,
+              tags: true,
               batch: true,
               designers: true,
               polishes: true

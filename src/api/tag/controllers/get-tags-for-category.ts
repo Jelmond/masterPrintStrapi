@@ -15,7 +15,7 @@ export default {
             },
             populate: {
                 products: {
-                    populate: ['images', 'tags', 'categories']
+                    populate: ['images', 'tags', 'categories', 'batch', 'designers', 'polishes']
                 }
             }
         });
