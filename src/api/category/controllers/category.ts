@@ -8,13 +8,9 @@ export default factories.createCoreController('api::category.category', ({ strap
   async find(ctx) {
     // Always use the same populate structure
     ctx.query.populate = {
+      image: true,
       products: {
-        batch: true,
-        designers: true,
-        polishes: true,
-        images: true,
-        categories: true,
-        tags: true,
+        populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
       },
     };
     
@@ -24,13 +20,9 @@ export default factories.createCoreController('api::category.category', ({ strap
   async findOne(ctx) {
     // Always use the same populate structure
     ctx.query.populate = {
+      image: true,
       products: {
-        batch: true,
-        designers: true,
-        polishes: true,
-        images: true,
-        categories: true,
-        tags: true,
+        populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
       },
     };
     

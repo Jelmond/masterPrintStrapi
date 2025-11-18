@@ -9,12 +9,7 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
     // Always use the same populate structure
     ctx.query.populate = {
       products: {
-        batch: true,
-        designers: true,
-        polishes: true,
-        images: true,
-        categories: true,
-        tags: true,
+        populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
       },
     };
     
@@ -25,12 +20,7 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
     // Always use the same populate structure
     ctx.query.populate = {
       products: {
-        batch: true,
-        designers: true,
-        polishes: true,
-        images: true,
-        categories: true,
-        tags: true,
+        populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
       },
     };
     
