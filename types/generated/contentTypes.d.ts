@@ -401,6 +401,7 @@ export interface ApiBatchBatch extends Struct.CollectionTypeSchema {
 export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
   collectionName: 'categories';
   info: {
+    description: '';
     displayName: 'Category';
     pluralName: 'categories';
     singularName: 'category';
@@ -412,6 +413,7 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    icon: Schema.Attribute.Enumeration<['cards', 'box', 'convert', 'stickers']>;
     image: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',
       true
