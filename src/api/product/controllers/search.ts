@@ -13,9 +13,9 @@ export default {
 
       const searchTerm = query.trim();
       
-      // Search categories
-      const categories = await strapi.documents('api::category.category').findMany({
-        filters: {
+      // Search categories using db.query to get database IDs
+      const categories = await strapi.db.query('api::category.category').findMany({
+        where: {
           $or: [
             {
               title: {
@@ -39,9 +39,9 @@ export default {
         }
       });
 
-      // Search products
-      const products = await strapi.documents('api::product.product').findMany({
-        filters: {
+      // Search products using db.query to get database IDs (matches get-similar-products approach)
+      const products = await strapi.db.query('api::product.product').findMany({
+        where: {
           $or: [
             {
               title: {
@@ -58,7 +58,10 @@ export default {
                 $containsi: searchTerm
               }
             }
-          ]
+          ],
+          publishedAt: {
+            $notNull: true
+          }
         },
         populate: {
           images: true,
@@ -71,8 +74,8 @@ export default {
       });
 
       // Search tags that match the query
-      const tags = await strapi.documents('api::tag.tag').findMany({
-        filters: {
+      const tags = await strapi.db.query('api::tag.tag').findMany({
+        where: {
           title: {
             $containsi: searchTerm
           }
@@ -92,12 +95,15 @@ export default {
       });
 
       // Get products that have matching tags
-      const productsByTags = await strapi.documents('api::product.product').findMany({
-        filters: {
+      const productsByTags = await strapi.db.query('api::product.product').findMany({
+        where: {
           tags: {
             title: {
               $containsi: searchTerm
             }
+          },
+          publishedAt: {
+            $notNull: true
           }
         },
         populate: {
@@ -112,8 +118,8 @@ export default {
 
       // Combine and deduplicate products
       const allProducts = [...products, ...productsByTags];
-      const uniqueProducts = allProducts.filter((product, index, self) => 
-        index === self.findIndex(p => p.documentId === product.documentId)
+      const uniqueProducts = Array.from(
+        new Map(allProducts.map(product => [product.id, product])).values()
       );
 
       return {
