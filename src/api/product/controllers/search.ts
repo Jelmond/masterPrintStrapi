@@ -14,7 +14,7 @@ export default {
       const searchTerm = query.trim();
       
       // Search categories
-      const categories = await strapi.entityService.findMany('api::category.category', {
+      const categories = await strapi.documents('api::category.category').findMany({
         filters: {
           $or: [
             {
@@ -40,7 +40,7 @@ export default {
       });
 
       // Search products
-      const products = await strapi.entityService.findMany('api::product.product', {
+      const products = await strapi.documents('api::product.product').findMany({
         filters: {
           $or: [
             {
@@ -71,7 +71,7 @@ export default {
       });
 
       // Search tags that match the query
-      const tags = await strapi.entityService.findMany('api::tag.tag', {
+      const tags = await strapi.documents('api::tag.tag').findMany({
         filters: {
           title: {
             $containsi: searchTerm
@@ -92,7 +92,7 @@ export default {
       });
 
       // Get products that have matching tags
-      const productsByTags = await strapi.entityService.findMany('api::product.product', {
+      const productsByTags = await strapi.documents('api::product.product').findMany({
         filters: {
           tags: {
             title: {
@@ -113,7 +113,7 @@ export default {
       // Combine and deduplicate products
       const allProducts = [...products, ...productsByTags];
       const uniqueProducts = allProducts.filter((product, index, self) => 
-        index === self.findIndex(p => p.id === product.id)
+        index === self.findIndex(p => p.documentId === product.documentId)
       );
 
       return {
