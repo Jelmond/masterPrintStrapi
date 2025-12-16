@@ -4,7 +4,8 @@
   "info": {
     "singularName": "address",
     "pluralName": "addresses",
-    "displayName": "Address"
+    "displayName": "Address",
+    "description": ""
   },
   "options": {
     "draftAndPublish": true
@@ -16,12 +17,6 @@
         "selfShipping",
         "shipping"
       ]
-    },
-    "firstName": {
-      "type": "string"
-    },
-    "lastName": {
-      "type": "string"
     },
     "organization": {
       "type": "string"
@@ -43,6 +38,24 @@
       "relation": "oneToMany",
       "target": "api::order.order",
       "mappedBy": "address"
+    },
+    "fullName": {
+      "type": "string"
+    },
+    "bankAdress": {
+      "type": "string"
+    },
+    "UNP": {
+      "type": "string"
+    },
+    "paymentAccount": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "isIndividual": {
+      "type": "boolean"
     }
   }
 }

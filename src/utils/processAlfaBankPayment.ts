@@ -32,29 +32,56 @@ export async function getPaymentLink(
     }
 
     const shiftedOrderId = getAlphaOrderId(order.id);
-    // Amount in Belarusian rubles (BYN) - send directly without cents conversion
-    const amount = parseFloat(order.price.toFixed(2));
+    // Amount in kopecks (BYN cents) - AlphaBank requires amount in smallest currency unit
+    // 164.90 BYN = 16490 kopecks
+    const amountInRubles = parseFloat(order.price.toFixed(2));
+    const amountInKopecks = Math.round(amountInRubles * 100);
+
+    console.log('═'.repeat(80));
+    console.log('🏦 ALPHABANK PAYMENT REGISTRATION');
+    console.log('═'.repeat(80));
+    console.log('Order ID:', order.id);
+    console.log('Shifted Order ID:', shiftedOrderId);
+    console.log('Amount in Rubles:', amountInRubles, 'BYN');
+    console.log('Amount in Kopecks:', amountInKopecks, 'kopecks');
+    console.log('Success URL:', successUrl);
+    console.log('Failure URL:', failureUrl);
+    console.log('═'.repeat(80));
 
     const paymentInfo = await fetch(
-        `${paymentUrl}register.do?amount=${amount}&userName=${userName}&password=${password}&orderNumber=${shiftedOrderId}&returnUrl=${encodeURIComponent(successUrl)}&failUrl=${encodeURIComponent(failureUrl)}&language=ru`,
+        `${paymentUrl}register.do?amount=${amountInKopecks}&userName=${userName}&password=${password}&orderNumber=${shiftedOrderId}&returnUrl=${encodeURIComponent(successUrl)}&failUrl=${encodeURIComponent(failureUrl)}&language=ru`,
         requestOptions
     );
 
     if (!paymentInfo.ok) {
+        console.log('❌ AlphaBank HTTP Error:', paymentInfo.status, paymentInfo.statusText);
         throw new Error(`Payment gateway request failed: ${paymentInfo.statusText}`);
     }
 
     const paymentResult: any = await paymentInfo.json();
 
-    console.log('Payment result:', paymentResult);
+    console.log('═'.repeat(80));
+    console.log('📥 ALPHABANK RESPONSE:');
+    console.log('═'.repeat(80));
+    console.log(JSON.stringify(paymentResult, null, 2));
+    console.log('═'.repeat(80));
 
     if (paymentResult.errorCode) {
+        console.log('❌ AlphaBank Error Code:', paymentResult.errorCode);
+        console.log('❌ AlphaBank Error Message:', paymentResult.errorMessage);
         throw new Error(`Payment gateway error: ${paymentResult.errorMessage || paymentResult.errorCode}`);
     }
 
     if (!paymentResult.orderId || !paymentResult.formUrl) {
+        console.log('❌ Invalid response - missing orderId or formUrl');
         throw new Error('Invalid payment response: missing orderId or formUrl');
     }
+
+    console.log('✅ Payment registered successfully');
+    console.log('   Order ID (Hash):', paymentResult.orderId);
+    console.log('   Payment URL:', paymentResult.formUrl);
+    console.log('═'.repeat(80));
+    console.log('\n');
 
     return {
         orderId: paymentResult.orderId,

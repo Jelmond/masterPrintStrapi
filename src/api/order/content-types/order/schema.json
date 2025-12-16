@@ -54,7 +54,7 @@
     "hashId": {
       "type": "string"
     },
-    "city": {
+    "comment": {
       "type": "string"
     }
   }

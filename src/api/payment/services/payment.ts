@@ -11,75 +11,149 @@ import {
 } from '../../../utils/sendTelegramMessage';
 
 export default factories.createCoreService('api::payment.payment', ({ strapi }) => ({
-  async createPaymentForOrder(orderId: number) {
+  async createPaymentForOrder(orderId: number, paymentMethod: string, shouldProcessAlphaBank: boolean = false) {
+    // Ensure orderId is valid
+    if (!orderId || isNaN(orderId)) {
+      throw new Error(`Invalid order ID: ${orderId}`);
+    }
+
+    strapi.log.info(`Creating payment for order ID: ${orderId}, payment method: ${paymentMethod}, shouldProcessAlphaBank: ${shouldProcessAlphaBank}`);
+
     // Fetch order with populated data
     const order = await strapi.entityService.findOne('api::order.order', orderId, {
       populate: ['order_items', 'address'],
     });
 
     if (!order) {
+      strapi.log.error(`Order with ID ${orderId} not found in database`);
       throw new Error(`Order with ID ${orderId} not found`);
     }
 
-    // Check if payment already exists
-    const existingPayment = await strapi.entityService.findMany('api::payment.payment', {
+    strapi.log.info(`Order found: ${JSON.stringify({ id: order.id, orderNumber: order.orderNumber })}`);
+
+    // Get the actual order ID and documentId from the fetched order
+    const actualOrderId = typeof order.id === 'string' ? parseInt(order.id) : order.id;
+    const orderDocumentId = order.documentId;
+
+    strapi.log.info(`Order details - ID: ${actualOrderId}, DocumentID: ${orderDocumentId}`);
+
+    // Check if payment already exists (oneToOne relation means only one payment per order)
+    // Use documentId if available, otherwise use id
+    const orderIdentifier = orderDocumentId || actualOrderId;
+    strapi.log.info(`Checking for existing payment with order identifier: ${orderIdentifier}`);
+    
+    const existingPayments = await strapi.entityService.findMany('api::payment.payment', {
       filters: {
         order: {
-          id: orderId,
+          [orderDocumentId ? 'documentId' : 'id']: orderIdentifier,
         },
       },
       limit: 1,
     });
 
-    if (existingPayment && existingPayment.length > 0) {
-      const payment = existingPayment[0];
-      if (payment.hashId && payment.paymentStatus === 'pending') {
-        // Return existing payment link
-        const orderIdNumber = typeof order.id === 'string' ? parseInt(order.id) : order.id;
-        const paymentLinkResponse = await getPaymentLink(
-          { description: `Order #${order.orderNumber}` },
-          { id: orderIdNumber, price: parseFloat(order.totalAmount.toString()) }
-        );
-        return {
-          payment,
-          paymentLink: paymentLinkResponse.formUrl,
-          hashId: payment.hashId,
-        };
+    // If payment already exists, return it or throw error
+    if (existingPayments && existingPayments.length > 0) {
+      const payment = existingPayments[0] as any;
+      
+      strapi.log.info(`Payment already exists for order ${orderId}, returning existing payment`);
+      
+      // If payment exists and we need AlphaBank processing
+      if (shouldProcessAlphaBank) {
+        // If payment has a hashId and is pending, return the existing payment link
+        if (payment.hashId && payment.paymentStatus === 'pending') {
+          const orderIdNumber = typeof order.id === 'string' ? parseInt(order.id) : order.id;
+          const paymentLinkResponse = await getPaymentLink(
+            { description: `Order #${order.orderNumber}` },
+            { id: orderIdNumber, price: parseFloat(order.totalAmount.toString()) }
+          );
+          return {
+            payment,
+            paymentLink: paymentLinkResponse.formUrl,
+            hashId: payment.hashId,
+          };
+        }
       }
+      
+      // Payment already exists, return it without creating a new one
+      const result: any = {
+        payment,
+      };
+      
+      if (payment.hashId && payment.paymentLink) {
+        result.paymentLink = payment.paymentLink;
+        result.hashId = payment.hashId;
+      }
+      
+      return result;
     }
 
-    // Get payment link from Alfa Bank
-    const orderIdNumber = typeof order.id === 'string' ? parseInt(order.id) : order.id;
-    const paymentLinkResponse = await getPaymentLink(
-      { description: `Order #${order.orderNumber}` },
-      { id: orderIdNumber, price: parseFloat(order.totalAmount.toString()) }
-    );
+    // In Strapi v5, relations often use documentId instead of id
+    // Try using documentId if it exists, otherwise fall back to id
+    const orderRelationId = orderDocumentId || actualOrderId;
+
+    strapi.log.info(`Using order relation ID: ${orderRelationId} (type: ${typeof orderRelationId})`);
+
+    let paymentData: any = {
+      paymentMethod: paymentMethod,
+      amount: order.totalAmount,
+      paymentStatus: 'pending',
+      paymentDate: null,
+      refundDate: null,
+      order: orderRelationId,  // Use documentId or id
+    };
+
+    let paymentLinkResponse: any = null;
+
+    // Only process AlphaBank payment if shouldProcessAlphaBank is true (card payment for individual)
+    if (shouldProcessAlphaBank) {
+      // Get payment link from Alfa Bank
+      const orderIdNumber = typeof order.id === 'string' ? parseInt(order.id) : order.id;
+      paymentLinkResponse = await getPaymentLink(
+        { description: `Order #${order.orderNumber}` },
+        { id: orderIdNumber, price: parseFloat(order.totalAmount.toString()) }
+      );
+
+      paymentData.hashId = paymentLinkResponse.orderId;
+
+      // Update order with hashId (use the original orderId passed to the function)
+      strapi.log.info(`Updating order ${orderId} with hashId: ${paymentLinkResponse.orderId}`);
+      await strapi.entityService.update('api::order.order', orderId, {
+        data: {
+          hashId: paymentLinkResponse.orderId,
+        },
+      });
+    } else {
+      // For non-card payments or organization payments, no hashId is needed
+      paymentData.hashId = null;
+    }
 
     // Create payment record
-    const payment = await strapi.entityService.create('api::payment.payment', {
-      data: {
-        paymentMethod: 'card', // Default to card, can be changed
-        amount: order.totalAmount,
-        paymentStatus: 'pending',
-        hashId: paymentLinkResponse.orderId,
-        paymentDate: null, // Will be set when payment is completed
-        refundDate: null,
-        order: orderId,
-      },
-    });
+    strapi.log.info(`Creating payment with data: ${JSON.stringify(paymentData)}`);
+    
+    let payment;
+    try {
+      payment = await strapi.entityService.create('api::payment.payment', {
+        data: paymentData,
+      });
+      
+      strapi.log.info(`Payment created successfully with ID: ${payment.id}`);
+    } catch (error: any) {
+      strapi.log.error(`Failed to create payment: ${error.message}`);
+      strapi.log.error(`Error details: ${JSON.stringify(error)}`);
+      throw new Error(`Failed to create payment for order ${orderId}: ${error.message}`);
+    }
 
-    // Update order with hashId
-    await strapi.entityService.update('api::order.order', orderId, {
-      data: {
-        hashId: paymentLinkResponse.orderId,
-      },
-    });
-
-    return {
+    const result: any = {
       payment,
-      paymentLink: paymentLinkResponse.formUrl,
-      hashId: paymentLinkResponse.orderId,
     };
+
+    // Only include payment link and hashId if AlphaBank was processed
+    if (shouldProcessAlphaBank && paymentLinkResponse) {
+      result.paymentLink = paymentLinkResponse.formUrl;
+      result.hashId = paymentLinkResponse.orderId;
+    }
+
+    return result;
   },
 
   async updatePaymentStatus(hashId: string, status: 'pending' | 'declined' | 'success' | 'refunded') {

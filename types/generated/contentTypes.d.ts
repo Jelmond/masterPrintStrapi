@@ -376,6 +376,7 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
 export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
   collectionName: 'addresses';
   info: {
+    description: '';
     displayName: 'Address';
     pluralName: 'addresses';
     singularName: 'address';
@@ -385,12 +386,14 @@ export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
   };
   attributes: {
     address: Schema.Attribute.String;
+    bankAdress: Schema.Attribute.String;
+    city: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     email: Schema.Attribute.String;
-    firstName: Schema.Attribute.String;
-    lastName: Schema.Attribute.String;
+    fullName: Schema.Attribute.String;
+    isIndividual: Schema.Attribute.Boolean;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -399,10 +402,12 @@ export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     orders: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
     organization: Schema.Attribute.String;
+    paymentAccount: Schema.Attribute.String;
     phone: Schema.Attribute.String;
     postalCode: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     type: Schema.Attribute.Enumeration<['selfShipping', 'shipping']>;
+    UNP: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -545,7 +550,7 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
   };
   attributes: {
     address: Schema.Attribute.Relation<'manyToOne', 'api::address.address'>;
-    city: Schema.Attribute.String;
+    comment: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -575,6 +580,7 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
 export interface ApiPaymentPayment extends Struct.CollectionTypeSchema {
   collectionName: 'payments';
   info: {
+    description: '';
     displayName: 'Payment';
     pluralName: 'payments';
     singularName: 'payment';
@@ -596,7 +602,9 @@ export interface ApiPaymentPayment extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     order: Schema.Attribute.Relation<'oneToOne', 'api::order.order'>;
     paymentDate: Schema.Attribute.DateTime;
-    paymentMethod: Schema.Attribute.Enumeration<['card', 'ERIP']>;
+    paymentMethod: Schema.Attribute.Enumeration<
+      ['paymentAccount', 'ERIP', 'card']
+    >;
     paymentStatus: Schema.Attribute.Enumeration<
       ['pending', 'declined', 'success', 'refunded']
     >;

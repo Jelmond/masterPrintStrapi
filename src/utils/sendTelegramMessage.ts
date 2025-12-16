@@ -57,13 +57,31 @@ export async function sendTelegramMessage(
 /**
  * Format order information for Telegram message
  */
-export function formatOrderMessage(order: any, orderItems: any[] = []): string {
+export function formatOrderMessage(
+  order: any, 
+  orderItems: any[] = [], 
+  shippingCost: number = 0, 
+  discount: number = 0
+): string {
   const itemsList = orderItems
     .map((item, index) => {
       const productName = item.product?.title || `Product #${item.product?.id || 'N/A'}`;
       return `${index + 1}. ${productName} - ${item.quantity} шт. × ${item.unitPrice} BYN = ${item.totalPrice} BYN`;
     })
     .join('\n');
+
+  // Build pricing breakdown
+  let pricingDetails = `<b>Сумма товаров:</b> ${order.subtotal} BYN`;
+  
+  if (shippingCost > 0) {
+    pricingDetails += `\n<b>Доставка:</b> +${shippingCost} BYN`;
+  }
+  
+  if (discount > 0) {
+    pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${discount.toFixed(2)} BYN`;
+  }
+  
+  pricingDetails += `\n<b>Итого:</b> ${order.totalAmount} BYN`;
 
   return `
 <b>🛒 Новый заказ создан</b>
@@ -75,7 +93,8 @@ export function formatOrderMessage(order: any, orderItems: any[] = []): string {
 <b>Товары:</b>
 ${itemsList || 'Нет товаров'}
 
-<b>Сумма:</b> ${order.totalAmount} BYN
+${pricingDetails}
+
 <b>ID заказа:</b> ${order.id}
   `.trim();
 }

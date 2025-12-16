@@ -4,7 +4,8 @@
   "info": {
     "singularName": "payment",
     "pluralName": "payments",
-    "displayName": "Payment"
+    "displayName": "Payment",
+    "description": ""
   },
   "options": {
     "draftAndPublish": true
@@ -13,8 +14,9 @@
     "paymentMethod": {
       "type": "enumeration",
       "enum": [
-        "card",
-        "ERIP"
+        "paymentAccount",
+        "ERIP",
+        "card"
       ]
     },
     "amount": {
