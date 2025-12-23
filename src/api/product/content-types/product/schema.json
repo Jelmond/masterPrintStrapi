@@ -84,6 +84,9 @@
       "type": "relation",
       "relation": "oneToOne",
       "target": "api::batch.batch"
+    },
+    "articul": {
+      "type": "string"
     }
   }
 }

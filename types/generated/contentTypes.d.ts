@@ -656,6 +656,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    articul: Schema.Attribute.String;
     batch: Schema.Attribute.Relation<'oneToOne', 'api::batch.batch'>;
     categories: Schema.Attribute.Relation<
       'manyToMany',

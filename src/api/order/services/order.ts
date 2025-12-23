@@ -89,13 +89,15 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       console.log(`   🔢 Quantity: ${quantity}`);
       console.log(`   💰 Line Total: ${unitPrice} × ${quantity} = ${totalPrice.toFixed(2)} BYN`);
 
-      // Store the product relation using documentId for Strapi v5
+      // Store the product relation using documentId (Strapi v5 uses documentId for relations)
       orderItemsData.push({
         quantity,
         unitPrice,
         totalPrice,
-        product: productInput.productDocumentId, // Use documentId for relation
+        product: product.documentId, // Use documentId for Strapi v5 relations
       });
+
+      console.log(`   🔗 Will link order item to product documentId: ${product.documentId}`);
 
       subtotal += totalPrice;
       console.log(`   📊 Running Subtotal: ${subtotal.toFixed(2)} BYN`);
@@ -139,6 +141,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     });
 
     console.log('✅ Address created with ID:', address.id);
+    console.log('   Address DocumentID:', address.documentId);
 
     // Step 3: Calculate total amount based on shipping type
     console.log('\n🚚 SHIPPING/DISCOUNT CALCULATION:');
@@ -187,6 +190,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     console.log(`Subtotal: ${subtotal.toFixed(2)} BYN`);
     console.log(`Total Amount: ${totalAmount.toFixed(2)} BYN`);
     console.log(`Comment: ${comment || 'N/A'}`);
+    console.log(`🔗 Linking to Address DocumentID: ${address.documentId}`);
     console.log('-'.repeat(80));
 
     // Step 5: Create order
@@ -197,13 +201,16 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
         orderDate: new Date(),
         subtotal,
         totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
-        address: address.id,
+        address: address.documentId, // Use documentId for Strapi v5 relations
         hashId: null, // Will be set after payment creation
         comment: comment || null,
       },
     });
 
     console.log(`✅ Order created with ID: ${order.id}`);
+    console.log(`   Order ID: ${order.id}`);
+    console.log(`   Order DocumentID: ${order.documentId}`);
+    console.log(`   Address Relation: ${address.documentId}`);
 
     // Step 6: Create order items
     console.log('\n📦 CREATING ORDER ITEMS:');
@@ -212,22 +219,39 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     const createdOrderItems = [];
     for (let i = 0; i < orderItemsData.length; i++) {
       const itemData = orderItemsData[i];
-      console.log(`Creating item ${i + 1}/${orderItemsData.length}:`, {
-        quantity: itemData.quantity,
-        unitPrice: itemData.unitPrice,
-        totalPrice: itemData.totalPrice
-      });
+      console.log(`Creating item ${i + 1}/${orderItemsData.length}:`);
+      console.log(`   Quantity: ${itemData.quantity}`);
+      console.log(`   Unit Price: ${itemData.unitPrice}`);
+      console.log(`   Total Price: ${itemData.totalPrice}`);
+      console.log(`   🔗 Product DocumentID: ${itemData.product}`);
+      console.log(`   🔗 Order DocumentID: ${order.documentId}`);
       
       const orderItem = await strapi.entityService.create('api::order-item.order-item', {
         data: {
-          ...itemData,
-          order: order.id,
+          quantity: itemData.quantity,
+          unitPrice: itemData.unitPrice,
+          totalPrice: itemData.totalPrice,
+          product: itemData.product, // documentId
+          order: order.documentId,   // documentId for Strapi v5
         },
-        populate: ['product'],
+        populate: ['product', 'order'],
       });
       createdOrderItems.push(orderItem);
       console.log(`   ✅ Order item created with ID: ${orderItem.id}`);
+      console.log(`      Product relation: ${(orderItem as any).product?.id || 'NOT SET'}`);
+      console.log(`      Order relation: ${(orderItem as any).order?.id || (orderItem as any).order || 'NOT SET'}`);
     }
+
+    // Verify relations were created
+    console.log('\n🔍 VERIFYING RELATIONS:');
+    console.log('-'.repeat(80));
+    const verifyOrder: any = await strapi.entityService.findOne('api::order.order', order.id, {
+      populate: ['order_items', 'address'],
+    });
+    console.log(`Order ${order.id} has:`);
+    console.log(`   Address: ${verifyOrder.address?.id ? '✅ Connected (ID: ' + verifyOrder.address.id + ')' : '❌ Not connected'}`);
+    console.log(`   Order Items: ${verifyOrder.order_items?.length || 0} items ${verifyOrder.order_items?.length > 0 ? '✅' : '❌'}`);
+    console.log('-'.repeat(80));
 
     // Step 7: Send Telegram notification
     console.log('\n📱 SENDING TELEGRAM NOTIFICATION:');

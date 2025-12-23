@@ -17,5 +17,14 @@ export default {
           middlewares: [],
         },
       },
+      {
+        method: "GET",
+        path: "/bestsellers",
+        handler: "bestsellers.find",
+        config: {
+          policies: [],
+          middlewares: [],
+        },
+      },
     ],
   };

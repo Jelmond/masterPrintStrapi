@@ -87,11 +87,12 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
       return result;
     }
 
-    // In Strapi v5, relations often use documentId instead of id
-    // Try using documentId if it exists, otherwise fall back to id
-    const orderRelationId = orderDocumentId || actualOrderId;
+    // In Strapi v5, relations use documentId (string) not numeric id
+    if (!orderDocumentId) {
+      throw new Error(`Order documentId is missing for order ${orderId}`);
+    }
 
-    strapi.log.info(`Using order relation ID: ${orderRelationId} (type: ${typeof orderRelationId})`);
+    strapi.log.info(`Using order relation DocumentID: ${orderDocumentId} (type: ${typeof orderDocumentId})`);
 
     let paymentData: any = {
       paymentMethod: paymentMethod,
@@ -99,7 +100,7 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
       paymentStatus: 'pending',
       paymentDate: null,
       refundDate: null,
-      order: orderRelationId,  // Use documentId or id
+      order: orderDocumentId,  // Use documentId for Strapi v5 relations
     };
 
     let paymentLinkResponse: any = null;
