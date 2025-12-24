@@ -63,10 +63,27 @@ export function formatOrderMessage(
   shippingCost: number = 0, 
   discount: number = 0
 ): string {
+  // Calculate discount percentage if discount exists
+  const discountPercentage = order.subtotal > 0 && discount > 0 
+    ? discount / order.subtotal 
+    : 0;
+
   const itemsList = orderItems
     .map((item, index) => {
       const productName = item.product?.title || `Product #${item.product?.id || 'N/A'}`;
-      return `${index + 1}. ${productName} - ${item.quantity} шт. × ${item.unitPrice} BYN = ${item.totalPrice} BYN`;
+      const articul = item.product?.articul || 'N/A';
+      
+      // Calculate discounted prices per product
+      let discountedUnitPrice = item.unitPrice;
+      let discountedTotalPrice = item.totalPrice;
+      
+      if (discountPercentage > 0) {
+        // Apply discount to each product proportionally
+        discountedUnitPrice = item.unitPrice * (1 - discountPercentage);
+        discountedTotalPrice = discountedUnitPrice * item.quantity;
+      }
+      
+      return `${index + 1}. ${productName} (Артикул: ${articul}) - ${item.quantity} шт. × ${discountedUnitPrice.toFixed(2)} BYN = ${discountedTotalPrice.toFixed(2)} BYN`;
     })
     .join('\n');
 

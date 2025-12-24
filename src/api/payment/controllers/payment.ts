@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+import { sendEmail, formatOrderCreatedEmailERIP, formatOrderCreatedEmailSelfPickup } from '../../../utils/sendEmail';
 
 export default factories.createCoreController('api::payment.payment', ({ strapi }) => ({
   async initiatePayment(ctx) {
@@ -128,6 +129,54 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         paymentMethod,
         shouldProcessAlphaBank
       );
+
+      // Step 4: Send email notification based on payment method and shipping type
+      console.log('\n📧 SENDING EMAIL NOTIFICATION:');
+      console.log('-'.repeat(80));
+      try {
+        // Fetch order with items for email
+        const orderWithItems = await strapi.entityService.findOne('api::order.order', orderResult.order.id, {
+          populate: ['order_items.product', 'address'],
+        });
+
+        if (email && orderWithItems) {
+          let emailContent;
+          
+          // Determine which email template to use
+          if (type === 'selfShipping') {
+            // Scenario 2: Self-pickup (cash/card on pickup)
+            emailContent = formatOrderCreatedEmailSelfPickup(
+              orderResult.order.orderNumber,
+              orderResult.orderItems,
+              orderResult.totalAmount,
+              orderResult.subtotal,
+              orderResult.discount
+            );
+          } else {
+            // Scenario 1: ERIP or payment account (for organizations or individuals with ERIP)
+            emailContent = formatOrderCreatedEmailERIP(
+              orderResult.order.orderNumber,
+              orderResult.orderItems,
+              orderResult.totalAmount,
+              orderResult.subtotal,
+              orderResult.discount
+            );
+          }
+
+          await sendEmail({
+            to: email,
+            subject: emailContent.subject,
+            html: emailContent.html,
+          });
+          console.log(`✅ Email sent successfully to ${email}`);
+        } else {
+          console.log('⚠️  Email not sent: email address not provided or order not found');
+        }
+      } catch (error: any) {
+        // Don't fail payment initiation if email fails
+        console.log('⚠️  Email notification failed:', error.message);
+        strapi.log.warn('Failed to send email notification for order creation:', error.message);
+      }
 
       // Return response to frontend
       const response: any = {

@@ -9,6 +9,7 @@ import {
   formatPaymentSuccessMessage,
   formatPaymentFailureMessage,
 } from '../../../utils/sendTelegramMessage';
+import { sendEmail, formatOrderPaidEmailAlphaBank } from '../../../utils/sendEmail';
 
 export default factories.createCoreService('api::payment.payment', ({ strapi }) => ({
   async createPaymentForOrder(orderId: number, paymentMethod: string, shouldProcessAlphaBank: boolean = false) {
@@ -221,6 +222,37 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
         } catch (error: any) {
           // Don't fail payment update if Telegram fails
           strapi.log.warn('Failed to send Telegram notification for payment status update:', error.message);
+        }
+
+        // Send email notification for successful AlphaBank payment (Scenario 3)
+        if (status === 'success' && updatedPayment.hashId) {
+          try {
+            const orderWithAddress = updatedOrder as any;
+            const userEmail = orderWithAddress.address?.email;
+            if (userEmail) {
+              // Get order items for email
+              const orderItems = orderWithAddress.order_items || [];
+              // Calculate subtotal from order items
+              const subtotal = orderItems.reduce((sum: number, item: any) => sum + (item.totalPrice || 0), 0);
+              const emailContent = formatOrderPaidEmailAlphaBank(
+                orderWithAddress.orderNumber,
+                orderItems,
+                orderWithAddress.totalAmount,
+                subtotal,
+                0 // Discount already applied in order creation
+              );
+
+              await sendEmail({
+                to: userEmail,
+                subject: emailContent.subject,
+                html: emailContent.html,
+              });
+              strapi.log.info(`Email sent successfully to ${userEmail} for order ${orderWithAddress.orderNumber}`);
+            }
+          } catch (error: any) {
+            // Don't fail payment update if email fails
+            strapi.log.warn('Failed to send email notification for payment success:', error.message);
+          }
         }
       }
     }

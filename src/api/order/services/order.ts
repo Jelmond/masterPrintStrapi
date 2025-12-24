@@ -180,8 +180,8 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     }
     console.log('='.repeat(80));
 
-    // Step 4: Generate order number (using timestamp or auto-increment)
-    const orderNumber = Date.now();
+    // Step 4: Generate order number (using timestamp in seconds for shorter number)
+    const orderNumber = Math.floor(Date.now() / 1000);
 
     console.log('\n📝 CREATING ORDER:');
     console.log('-'.repeat(80));
