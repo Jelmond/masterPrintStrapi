@@ -12,7 +12,7 @@
   },
   "attributes": {
     "orderNumber": {
-      "type": "integer"
+      "type": "string"
     },
     "orderStatus": {
       "type": "enumeration",

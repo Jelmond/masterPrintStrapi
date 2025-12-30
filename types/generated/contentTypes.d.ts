@@ -563,7 +563,7 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
       'api::order-item.order-item'
     >;
     orderDate: Schema.Attribute.DateTime;
-    orderNumber: Schema.Attribute.Integer;
+    orderNumber: Schema.Attribute.String;
     orderStatus: Schema.Attribute.Enumeration<
       ['pending', 'processing', 'canceled', 'refunded', 'success']
     >;

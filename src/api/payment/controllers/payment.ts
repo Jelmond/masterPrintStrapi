@@ -265,4 +265,140 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
       );
     }
   },
+
+  async handleTelegramCallback(ctx) {
+    try {
+      const { callback_query } = ctx.request.body;
+      
+      if (!callback_query || !callback_query.data) {
+        return ctx.badRequest('Invalid callback query');
+      }
+
+      const callbackData = callback_query.data;
+      const [action, status, orderId] = callbackData.split('_');
+
+      if (action !== 'payment' || !['success', 'declined'].includes(status) || !orderId) {
+        return ctx.badRequest('Invalid callback data');
+      }
+
+      // Find payment by order ID
+      const order = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+        populate: ['order_items', 'address'],
+      });
+
+      if (!order) {
+        return ctx.notFound('Order not found');
+      }
+
+      // Find payment for this order
+      const payments = await strapi.entityService.findMany('api::payment.payment', {
+        filters: {
+          order: {
+            id: parseInt(orderId),
+          },
+        },
+        limit: 1,
+      });
+
+      if (!payments || payments.length === 0) {
+        return ctx.notFound('Payment not found for this order');
+      }
+
+      const payment = payments[0];
+      const paymentStatus = status === 'success' ? 'success' : 'declined';
+
+      // Update payment status using the payment service
+      const paymentService = strapi.service('api::payment.payment');
+      
+      // If payment has hashId, use it; otherwise use payment ID
+      if (payment.hashId) {
+        await paymentService.updatePaymentStatus(payment.hashId, paymentStatus);
+      } else {
+        // For payments without hashId, update directly
+        await strapi.entityService.update('api::payment.payment', payment.id, {
+          data: {
+            paymentStatus: paymentStatus,
+            ...(paymentStatus === 'success' ? { paymentDate: new Date() } : {}),
+          },
+        });
+
+        // Update order status
+        const orderStatus = paymentStatus === 'success' ? 'processing' : 'canceled';
+        await strapi.entityService.update('api::order.order', parseInt(orderId), {
+          data: { orderStatus },
+        });
+      }
+
+      // Answer the callback query to remove loading state
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (botToken && callback_query.id) {
+        const message = paymentStatus === 'success' 
+          ? '✅ Платеж отмечен как оплачен' 
+          : '❌ Платеж отмечен как не оплачен';
+        
+        try {
+          await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              callback_query_id: callback_query.id,
+              text: message,
+              show_alert: false,
+            }),
+          });
+        } catch (error: any) {
+          strapi.log.warn('Failed to answer callback query:', error);
+        }
+      }
+
+      return ctx.send({ success: true, status: paymentStatus });
+    } catch (error: any) {
+      strapi.log.error('Telegram callback handler error:', error);
+      return ctx.internalServerError(error.message || 'Failed to process callback');
+    }
+  },
+
+  async setupTelegramWebhook(ctx) {
+    try {
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (!botToken) {
+        return ctx.badRequest('TELEGRAM_BOT_TOKEN is not set');
+      }
+
+      // Get webhook URL from query or environment
+      const webhookUrl = ctx.query.url || process.env.TELEGRAM_WEBHOOK_URL;
+      if (!webhookUrl) {
+        return ctx.badRequest('Webhook URL is required. Provide ?url=https://your-domain.com/api/payments/telegram-callback');
+      }
+
+      // Set webhook with Telegram
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: webhookUrl,
+        }),
+      });
+
+      const result = (await response.json()) as { ok: boolean; description?: string; result?: any };
+
+      if (result.ok) {
+        return ctx.send({
+          success: true,
+          message: 'Webhook set successfully',
+          webhookUrl,
+          result,
+        });
+      } else {
+        return ctx.badRequest({
+          success: false,
+          message: 'Failed to set webhook',
+          error: result.description || 'Unknown error',
+        });
+      }
+    } catch (error: any) {
+      strapi.log.error('Webhook setup error:', error);
+      return ctx.internalServerError(error.message || 'Failed to set up webhook');
+    }
+  },
 }));

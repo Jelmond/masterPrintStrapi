@@ -5,6 +5,12 @@
 interface TelegramMessageOptions {
   chatId?: string;
   parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
+  replyMarkup?: {
+    inline_keyboard: Array<Array<{
+      text: string;
+      callback_data: string;
+    }>>;
+  };
 }
 
 export async function sendTelegramMessage(
@@ -38,6 +44,7 @@ export async function sendTelegramMessage(
         chat_id: chatId,
         text: message,
         parse_mode: parseMode,
+        ...(options.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
       }),
     });
 
@@ -87,18 +94,99 @@ export function formatOrderMessage(
     })
     .join('\n');
 
-  // Build pricing breakdown
-  let pricingDetails = `<b>Сумма товаров:</b> ${order.subtotal} BYN`;
+  // Build pricing breakdown - format all values to 2 decimal places to avoid floating point issues
+  const formattedSubtotal = parseFloat(order.subtotal.toString()).toFixed(2);
+  let pricingDetails = `<b>Сумма товаров:</b> ${formattedSubtotal} BYN`;
   
   if (shippingCost > 0) {
-    pricingDetails += `\n<b>Доставка:</b> +${shippingCost} BYN`;
+    pricingDetails += `\n<b>Доставка:</b> +${parseFloat(shippingCost.toString()).toFixed(2)} BYN`;
   }
   
   if (discount > 0) {
-    pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${discount.toFixed(2)} BYN`;
+    // Determine discount description based on subtotal and shipping type
+    const subtotalNum = parseFloat(order.subtotal.toString());
+    let discountDesc = '';
+    
+    if (subtotalNum >= 1500) {
+      discountDesc = '20% (≥1500 BYN)';
+    } else if (subtotalNum >= 700) {
+      discountDesc = '5% (≥700 BYN)';
+    } else {
+      discountDesc = '0% (<700 BYN)';
+    }
+    
+    // Check if it's self-pickup (has discount but no shipping cost)
+    const isSelfPickup = shippingCost === 0 && discount > 0;
+    
+    if (isSelfPickup && subtotalNum >= 700) {
+      // Show both base discount and self-pickup discount separately
+      const baseDiscount = subtotalNum >= 1500 ? subtotalNum * 0.20 : subtotalNum * 0.05;
+      const selfPickupDiscount = subtotalNum * 0.03;
+      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
+      pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${parseFloat(selfPickupDiscount.toString()).toFixed(2)} BYN`;
+    } else if (isSelfPickup) {
+      // Only self-pickup discount (subtotal < 700)
+      pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${parseFloat(discount.toString()).toFixed(2)} BYN`;
+    } else {
+      // Only base discount (delivery)
+      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(discount.toString()).toFixed(2)} BYN`;
+    }
   }
   
-  pricingDetails += `\n<b>Итого:</b> ${order.totalAmount} BYN`;
+  pricingDetails += `\n<b>Итого:</b> ${parseFloat(order.totalAmount.toString()).toFixed(2)} BYN`;
+
+  // Build address/user information
+  const address = order.address || {};
+  let addressInfo = `<b>Информация о клиенте:</b>\n`;
+  
+  if (address.fullName) {
+    addressInfo += `<b>ФИО:</b> ${address.fullName}\n`;
+  }
+  
+  if (address.email) {
+    addressInfo += `<b>Email:</b> ${address.email}\n`;
+  }
+  
+  if (address.phone) {
+    addressInfo += `<b>Телефон:</b> ${address.phone}\n`;
+  }
+  
+  if (address.city) {
+    addressInfo += `<b>Город:</b> ${address.city}\n`;
+  }
+  
+  if (address.address) {
+    addressInfo += `<b>Адрес:</b> ${address.address}\n`;
+  }
+  
+  if (address.postalCode) {
+    addressInfo += `<b>Почтовый индекс:</b> ${address.postalCode}\n`;
+  }
+  
+  if (address.type) {
+    const shippingType = address.type === 'selfShipping' ? 'Самовывоз' : 'Доставка';
+    addressInfo += `<b>Тип доставки:</b> ${shippingType}\n`;
+  }
+  
+  if (address.isIndividual !== undefined) {
+    addressInfo += `<b>Тип клиента:</b> ${address.isIndividual ? 'Физическое лицо' : 'Юридическое лицо'}\n`;
+  }
+  
+  // Organization information (if not individual)
+  if (!address.isIndividual) {
+    if (address.organization) {
+      addressInfo += `<b>Организация:</b> ${address.organization}\n`;
+    }
+    if (address.UNP) {
+      addressInfo += `<b>УНП:</b> ${address.UNP}\n`;
+    }
+    if (address.paymentAccount) {
+      addressInfo += `<b>Расчетный счет:</b> ${address.paymentAccount}\n`;
+    }
+    if (address.bankAdress) {
+      addressInfo += `<b>Адрес банка:</b> ${address.bankAdress}\n`;
+    }
+  }
 
   return `
 <b>🛒 Новый заказ создан</b>
@@ -106,6 +194,8 @@ export function formatOrderMessage(
 <b>Номер заказа:</b> #${order.orderNumber}
 <b>Статус:</b> ${order.orderStatus}
 <b>Дата:</b> ${new Date(order.orderDate).toLocaleString('ru-RU')}
+
+${addressInfo}
 
 <b>Товары:</b>
 ${itemsList || 'Нет товаров'}

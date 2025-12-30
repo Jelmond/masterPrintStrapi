@@ -31,5 +31,23 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/payments/telegram-callback',
+      handler: 'payment.handleTelegramCallback',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'GET',
+      path: '/payments/setup-telegram-webhook',
+      handler: 'payment.setupTelegramWebhook',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

@@ -143,45 +143,73 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     console.log('✅ Address created with ID:', address.id);
     console.log('   Address DocumentID:', address.documentId);
 
-    // Step 3: Calculate total amount based on shipping type
+    // Step 3: Calculate total amount based on shipping type and discount tiers
     console.log('\n🚚 SHIPPING/DISCOUNT CALCULATION:');
     console.log('-'.repeat(80));
     
     let totalAmount = subtotal;
     let shippingCost = 0;
     let discount = 0;
+    let baseDiscount = 0;
+    let selfShippingDiscount = 0;
+    let discountDescription = '';
 
     const shippingType = addressInput.type || 'shipping';
+
+    // Calculate base discount based on subtotal tiers
+    if (subtotal >= 1500) {
+      baseDiscount = subtotal * 0.20; // 20% discount
+      discountDescription = '20% (≥1500 BYN)';
+    } else if (subtotal >= 700) {
+      baseDiscount = subtotal * 0.05; // 5% discount
+      discountDescription = '5% (≥700 BYN)';
+    } else {
+      baseDiscount = 0; // 0% discount
+      discountDescription = '0% (<700 BYN)';
+    }
 
     if (shippingType === 'shipping') {
       // Add 20 rubles for shipping
       shippingCost = 20;
-      totalAmount = subtotal + shippingCost;
+      discount = baseDiscount;
+      totalAmount = subtotal - discount + shippingCost;
       
       console.log('📦 Shipping Type: DELIVERY');
       console.log(`   Subtotal:      ${subtotal.toFixed(2)} BYN`);
+      if (discount > 0) {
+        console.log(`   Скидка (${discountDescription}): -${discount.toFixed(2)} BYN`);
+      }
       console.log(`   Shipping Cost: +${shippingCost.toFixed(2)} BYN`);
       console.log(`   ─────────────────────────────────`);
       console.log(`   TOTAL:         ${totalAmount.toFixed(2)} BYN ✅`);
       
-      strapi.log.info(`Shipping type: shipping - Added 20 BYN shipping cost. Subtotal: ${subtotal}, Total: ${totalAmount}`);
+      strapi.log.info(`Shipping type: shipping - Base discount: ${discount.toFixed(2)} BYN (${discountDescription}), Shipping: ${shippingCost} BYN. Subtotal: ${subtotal}, Total: ${totalAmount}`);
     } else if (shippingType === 'selfShipping') {
-      // Apply 3% discount for self-pickup
-      discount = subtotal * 0.03;
+      // Apply base discount + additional 3% for self-pickup
+      selfShippingDiscount = subtotal * 0.03; // Additional 3% for self-pickup
+      discount = baseDiscount + selfShippingDiscount;
       totalAmount = subtotal - discount;
       
       console.log('🏪 Shipping Type: SELF-PICKUP');
       console.log(`   Subtotal:      ${subtotal.toFixed(2)} BYN`);
-      console.log(`   Discount (3%): -${discount.toFixed(2)} BYN`);
+      if (baseDiscount > 0) {
+        console.log(`   Скидка (${discountDescription}): -${baseDiscount.toFixed(2)} BYN`);
+      }
+      if (selfShippingDiscount > 0) {
+        console.log(`   Скидка (самовывоз 3%): -${selfShippingDiscount.toFixed(2)} BYN`);
+      }
+      console.log(`   Общая скидка:  -${discount.toFixed(2)} BYN`);
       console.log(`   ─────────────────────────────────`);
       console.log(`   TOTAL:         ${totalAmount.toFixed(2)} BYN ✅`);
       
-      strapi.log.info(`Shipping type: selfShipping - Applied 3% discount (${discount.toFixed(2)} BYN). Subtotal: ${subtotal}, Total: ${totalAmount}`);
+      strapi.log.info(`Shipping type: selfShipping - Base discount: ${baseDiscount.toFixed(2)} BYN (${discountDescription}), Self-pickup discount: ${selfShippingDiscount.toFixed(2)} BYN, Total discount: ${discount.toFixed(2)} BYN. Subtotal: ${subtotal}, Total: ${totalAmount}`);
     }
     console.log('='.repeat(80));
 
-    // Step 4: Generate order number (using timestamp in seconds for shorter number)
-    const orderNumber = Math.floor(Date.now() / 1000);
+    // Step 4: Generate order number (using base36 encoding for shorter number)
+    // Convert timestamp to base36 for a shorter alphanumeric order number
+    const timestamp = Math.floor(Date.now() / 1000);
+    const orderNumber = timestamp.toString(36).toUpperCase();
 
     console.log('\n📝 CREATING ORDER:');
     console.log('-'.repeat(80));
@@ -262,7 +290,16 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
         populate: ['order_items.product', 'address'],
       });
       const message = formatOrderMessage(orderWithItems, createdOrderItems, shippingCost, discount);
-      await sendTelegramMessage(message);
+      // Add inline keyboard buttons for payment status
+      const replyMarkup = {
+        inline_keyboard: [
+          [
+            { text: '✅ Оплачен', callback_data: `payment_success_${order.id}` },
+            { text: '❌ Не оплачен', callback_data: `payment_declined_${order.id}` }
+          ]
+        ]
+      };
+      await sendTelegramMessage(message, { replyMarkup });
       console.log('✅ Telegram notification sent successfully');
     } catch (error: any) {
       // Don't fail order creation if Telegram fails
