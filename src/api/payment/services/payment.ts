@@ -210,6 +210,41 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
           },
         });
 
+        // Restore stock when payment is declined/cancelled
+        if (status === 'declined') {
+          try {
+            const orderWithItems = updatedOrder as any;
+            strapi.log.info(`Restoring stock for cancelled order ${orderId}`);
+            
+            if (orderWithItems.order_items) {
+              for (const orderItem of orderWithItems.order_items) {
+                const product = orderItem.product;
+                if (product && product.id) {
+                  const currentStock = product.stock !== null && product.stock !== undefined 
+                    ? parseInt(product.stock.toString()) 
+                    : null;
+                  
+                  if (currentStock !== null) {
+                    const quantity = orderItem.quantity || 0;
+                    const restoredStock = currentStock + quantity;
+                    
+                    await strapi.entityService.update('api::product.product', product.id, {
+                      data: {
+                        stock: restoredStock,
+                      },
+                    });
+                    
+                    strapi.log.info(`Stock restored for product ${product.id}: ${currentStock} → ${restoredStock} (+${quantity})`);
+                  }
+                }
+              }
+              strapi.log.info(`✅ Stock restored for order ${orderId}`);
+            }
+          } catch (error: any) {
+            strapi.log.error('Failed to restore stock:', error);
+          }
+        }
+
         // Send Telegram notification based on payment status
         try {
           if (status === 'success') {

@@ -386,6 +386,48 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
               data: { orderStatus },
             });
             
+            // Restore stock when payment is cancelled
+            if (paymentStatus === 'declined') {
+              try {
+                const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+                  populate: ['order_items.product', 'address'],
+                });
+                
+                if (updatedOrder) {
+                  const orderWithItems = updatedOrder as any;
+                  console.log('\n📦 RESTORING STOCK FOR CANCELLED ORDER (fallback path):');
+                  console.log('-'.repeat(80));
+                  
+                  if (orderWithItems.order_items) {
+                    for (const orderItem of orderWithItems.order_items) {
+                      const product = orderItem.product;
+                      if (product && product.id) {
+                        const currentStock = product.stock !== null && product.stock !== undefined 
+                          ? parseInt(product.stock.toString()) 
+                          : null;
+                        
+                        if (currentStock !== null) {
+                          const quantity = orderItem.quantity || 0;
+                          const restoredStock = currentStock + quantity;
+                          
+                          console.log(`   Product ${product.id}: ${currentStock} → ${restoredStock} (+${quantity})`);
+                          
+                          await strapi.entityService.update('api::product.product', product.id, {
+                            data: {
+                              stock: restoredStock,
+                            },
+                          });
+                        }
+                      }
+                    }
+                    strapi.log.info(`✅ Stock restored for order ${orderId}`);
+                  }
+                }
+              } catch (error: any) {
+                strapi.log.error('Failed to restore stock:', error);
+              }
+            }
+            
             // Send Telegram notification
             try {
               const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
@@ -461,48 +503,95 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           });
         }
         
-        // Items are already reserved (stock reduced) when order is created
-        // When payment is marked as paid, items are considered sold
-        if (paymentStatus === 'success') {
+        // Get order with items for stock restoration and Telegram notification
+        const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+          populate: ['order_items.product', 'address'],
+        });
+        
+        if (!updatedOrder) {
+          strapi.log.warn(`Order not found: ${orderId}`);
+          return;
+        }
+
+        const orderWithItems = updatedOrder as any;
+        
+        // Restore stock when payment is cancelled/declined
+        if (paymentStatus === 'declined') {
+          try {
+            console.log('\n📦 RESTORING STOCK FOR CANCELLED ORDER:');
+            console.log('-'.repeat(80));
+            
+            if (orderWithItems.order_items) {
+              for (const orderItem of orderWithItems.order_items) {
+                const product = orderItem.product;
+                if (product && product.id) {
+                  const currentStock = product.stock !== null && product.stock !== undefined 
+                    ? parseInt(product.stock.toString()) 
+                    : null;
+                  
+                  if (currentStock !== null) {
+                    const quantity = orderItem.quantity || 0;
+                    const restoredStock = currentStock + quantity;
+                    
+                    console.log(`   Product ${product.id} (${product.title}):`);
+                    console.log(`      Current stock: ${currentStock}`);
+                    console.log(`      Restoring: +${quantity}`);
+                    console.log(`      New stock: ${restoredStock}`);
+                    
+                    // Restore product stock
+                    await strapi.entityService.update('api::product.product', product.id, {
+                      data: {
+                        stock: restoredStock,
+                      },
+                    });
+                    
+                    console.log(`   ✅ Stock restored for product ${product.id}`);
+                  } else {
+                    console.log(`   ⚠️  Product ${product.id} has no stock field, skipping`);
+                  }
+                }
+              }
+              console.log('-'.repeat(80));
+              strapi.log.info(`✅ Stock restored for order ${orderId} - payment was cancelled`);
+            }
+          } catch (error: any) {
+            strapi.log.error('Failed to restore stock:', error);
+          }
+        } else if (paymentStatus === 'success') {
+          // Items are already reserved (stock reduced) when order is created
+          // When payment is marked as paid, items are considered sold
           strapi.log.info(`✅ Payment confirmed for order ${orderId} - items were already reserved on order creation`);
         }
 
         // Send Telegram notification with full order info when marked as paid
         try {
-          const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
-            populate: ['order_items.product', 'address'],
-          });
+          const { sendTelegramMessage, formatOrderMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
           
-          if (updatedOrder) {
-            const { sendTelegramMessage, formatOrderMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
+          if (paymentStatus === 'success') {
+            // Send full order information when marked as paid
+            const orderItems = orderWithItems.order_items || [];
+            // Calculate shipping and discount from order
+            const shippingCost = orderWithItems.totalAmount && orderWithItems.subtotal 
+              ? (orderWithItems.totalAmount > orderWithItems.subtotal ? orderWithItems.totalAmount - orderWithItems.subtotal : 0)
+              : 0;
+            const discount = orderWithItems.subtotal && orderWithItems.totalAmount
+              ? (orderWithItems.subtotal - (orderWithItems.totalAmount - (shippingCost > 0 ? shippingCost : 0)))
+              : 0;
             
-            if (paymentStatus === 'success') {
-              // Send full order information when marked as paid
-              const orderWithItems = updatedOrder as any;
-              const orderItems = orderWithItems.order_items || [];
-              // Calculate shipping and discount from order
-              const shippingCost = orderWithItems.totalAmount && orderWithItems.subtotal 
-                ? (orderWithItems.totalAmount > orderWithItems.subtotal ? orderWithItems.totalAmount - orderWithItems.subtotal : 0)
-                : 0;
-              const discount = orderWithItems.subtotal && orderWithItems.totalAmount
-                ? (orderWithItems.subtotal - (orderWithItems.totalAmount - (shippingCost > 0 ? shippingCost : 0)))
-                : 0;
-              
-              const message = formatOrderMessage(orderWithItems, orderItems, shippingCost, discount);
-              // Add buttons for payment status
-              const replyMarkup = {
-                inline_keyboard: [
-                  [
-                    { text: '✅ Оплачен', callback_data: `payment_success_${orderWithItems.id}` },
-                    { text: '❌ Не оплачен', callback_data: `payment_declined_${orderWithItems.id}` }
-                  ]
+            const message = formatOrderMessage(orderWithItems, orderItems, shippingCost, discount);
+            // Add buttons for payment status
+            const replyMarkup = {
+              inline_keyboard: [
+                [
+                  { text: '✅ Оплачен', callback_data: `payment_success_${orderWithItems.id}` },
+                  { text: '❌ Не оплачен', callback_data: `payment_declined_${orderWithItems.id}` }
                 ]
-              };
-              await sendTelegramMessage(message, { replyMarkup });
-            } else {
-              const message = formatPaymentFailureMessage(updatedOrder, payment);
-              await sendTelegramMessage(message);
-            }
+              ]
+            };
+            await sendTelegramMessage(message, { replyMarkup });
+          } else {
+            const message = formatPaymentFailureMessage(orderWithItems, payment);
+            await sendTelegramMessage(message);
           }
         } catch (error: any) {
           strapi.log.warn('Failed to send Telegram notification:', error);
