@@ -200,7 +200,12 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
       }
 
       const updatedOrder = await strapi.entityService.findOne('api::order.order', orderId, {
-        populate: ['order_items.product', 'address'],
+        populate: {
+          order_items: {
+            populate: ['product'],
+          },
+          address: true,
+        },
       });
 
       if (updatedOrder) {
@@ -214,34 +219,63 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
         if (status === 'declined') {
           try {
             const orderWithItems = updatedOrder as any;
-            strapi.log.info(`Restoring stock for cancelled order ${orderId}`);
+            strapi.log.info(`\n📦 RESTORING STOCK FOR CANCELLED ORDER ${orderId}:`);
+            strapi.log.info('-'.repeat(80));
             
-            if (orderWithItems.order_items) {
+            if (!orderWithItems.order_items || orderWithItems.order_items.length === 0) {
+              strapi.log.warn(`No order items found for order ${orderId}`);
+            } else {
+              strapi.log.info(`Found ${orderWithItems.order_items.length} order items`);
+              
               for (const orderItem of orderWithItems.order_items) {
                 const product = orderItem.product;
-                if (product && product.id) {
-                  const currentStock = product.stock !== null && product.stock !== undefined 
-                    ? parseInt(product.stock.toString()) 
-                    : null;
-                  
-                  if (currentStock !== null) {
-                    const quantity = orderItem.quantity || 0;
-                    const restoredStock = currentStock + quantity;
-                    
-                    await strapi.entityService.update('api::product.product', product.id, {
-                      data: {
-                        stock: restoredStock,
-                      },
-                    });
-                    
-                    strapi.log.info(`Stock restored for product ${product.id}: ${currentStock} → ${restoredStock} (+${quantity})`);
-                  }
+                if (!product) {
+                  strapi.log.warn(`Order item ${orderItem.id} has no product`);
+                  continue;
                 }
+                
+                if (!product.id) {
+                  strapi.log.warn(`Product has no ID for order item ${orderItem.id}`);
+                  continue;
+                }
+                
+                const currentStock = product.stock !== null && product.stock !== undefined 
+                  ? parseInt(product.stock.toString()) 
+                  : null;
+                
+                if (currentStock === null) {
+                  strapi.log.warn(`Product ${product.id} (${product.title || 'N/A'}) has no stock field`);
+                  continue;
+                }
+                
+                const quantity = orderItem.quantity || 0;
+                if (quantity === 0) {
+                  strapi.log.warn(`Order item ${orderItem.id} has quantity 0, skipping`);
+                  continue;
+                }
+                
+                const restoredStock = currentStock + quantity;
+                
+                strapi.log.info(`Product ${product.id} (${product.title || 'N/A'}):`);
+                strapi.log.info(`   Current stock: ${currentStock}`);
+                strapi.log.info(`   Restoring: +${quantity}`);
+                strapi.log.info(`   New stock: ${restoredStock}`);
+                
+                // Restore product stock
+                await strapi.entityService.update('api::product.product', product.id, {
+                  data: {
+                    stock: restoredStock,
+                  },
+                });
+                
+                strapi.log.info(`   ✅ Stock updated for product ${product.id}`);
               }
-              strapi.log.info(`✅ Stock restored for order ${orderId}`);
+              strapi.log.info('-'.repeat(80));
+              strapi.log.info(`✅ Stock restoration completed for order ${orderId}`);
             }
           } catch (error: any) {
             strapi.log.error('Failed to restore stock:', error);
+            strapi.log.error('Error stack:', error.stack);
           }
         }
 

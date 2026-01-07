@@ -5,6 +5,72 @@
 import { factories } from '@strapi/strapi';
 import { sendEmail, formatOrderCreatedEmailERIP, formatOrderCreatedEmailSelfPickup } from '../../../utils/sendEmail';
 
+/**
+ * Helper function to restore stock for a cancelled order
+ */
+async function restoreStockForOrder(orderWithItems: any, orderId: number, strapi: any) {
+  try {
+    strapi.log.info(`\n📦 RESTORING STOCK FOR CANCELLED ORDER ${orderId}:`);
+    strapi.log.info('-'.repeat(80));
+    
+    if (!orderWithItems.order_items || orderWithItems.order_items.length === 0) {
+      strapi.log.warn(`No order items found for order ${orderId}`);
+      return;
+    }
+    
+    strapi.log.info(`Found ${orderWithItems.order_items.length} order items`);
+    
+    for (const orderItem of orderWithItems.order_items) {
+      const product = orderItem.product;
+      if (!product) {
+        strapi.log.warn(`Order item ${orderItem.id} has no product`);
+        continue;
+      }
+      
+      if (!product.id) {
+        strapi.log.warn(`Product has no ID for order item ${orderItem.id}`);
+        continue;
+      }
+      
+      const currentStock = product.stock !== null && product.stock !== undefined 
+        ? parseInt(product.stock.toString()) 
+        : null;
+      
+      if (currentStock === null) {
+        strapi.log.warn(`Product ${product.id} (${product.title || 'N/A'}) has no stock field`);
+        continue;
+      }
+      
+      const quantity = orderItem.quantity || 0;
+      if (quantity === 0) {
+        strapi.log.warn(`Order item ${orderItem.id} has quantity 0, skipping`);
+        continue;
+      }
+      
+      const restoredStock = currentStock + quantity;
+      
+      strapi.log.info(`Product ${product.id} (${product.title || 'N/A'}):`);
+      strapi.log.info(`   Current stock: ${currentStock}`);
+      strapi.log.info(`   Restoring: +${quantity}`);
+      strapi.log.info(`   New stock: ${restoredStock}`);
+      
+      // Restore product stock
+      await strapi.entityService.update('api::product.product', product.id, {
+        data: {
+          stock: restoredStock,
+        },
+      });
+      
+      strapi.log.info(`   ✅ Stock updated for product ${product.id}`);
+    }
+    strapi.log.info('-'.repeat(80));
+    strapi.log.info(`✅ Stock restoration completed for order ${orderId}`);
+  } catch (error: any) {
+    strapi.log.error('Failed to restore stock:', error);
+    strapi.log.error('Error stack:', error.stack);
+  }
+}
+
 export default factories.createCoreController('api::payment.payment', ({ strapi }) => ({
   async initiatePayment(ctx) {
     try {
@@ -483,6 +549,16 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         // Update payment status using the payment service
         const paymentService = strapi.service('api::payment.payment');
         
+        // Get order with items BEFORE updating payment status (for stock restoration)
+        const orderBeforeUpdate = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+          populate: ['order_items.product', 'address'],
+        });
+        
+        if (!orderBeforeUpdate) {
+          strapi.log.warn(`Order not found: ${orderId}`);
+          return;
+        }
+
         // If payment has hashId, use it; otherwise use payment ID
         if (payment.hashId) {
           // Payment service will handle order status update and Telegram notification
@@ -501,9 +577,15 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           await strapi.entityService.update('api::order.order', parseInt(orderId), {
             data: { orderStatus },
           });
+          
+          // Restore stock when payment is cancelled/declined (for payments without hashId)
+          if (paymentStatus === 'declined') {
+            const orderWithItems = orderBeforeUpdate as any;
+            await restoreStockForOrder(orderWithItems, orderId, strapi);
+          }
         }
         
-        // Get order with items for stock restoration and Telegram notification
+        // Get order with items for Telegram notification
         const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
           populate: ['order_items.product', 'address'],
         });
@@ -515,49 +597,12 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
         const orderWithItems = updatedOrder as any;
         
-        // Restore stock when payment is cancelled/declined
-        if (paymentStatus === 'declined') {
-          try {
-            console.log('\n📦 RESTORING STOCK FOR CANCELLED ORDER:');
-            console.log('-'.repeat(80));
-            
-            if (orderWithItems.order_items) {
-              for (const orderItem of orderWithItems.order_items) {
-                const product = orderItem.product;
-                if (product && product.id) {
-                  const currentStock = product.stock !== null && product.stock !== undefined 
-                    ? parseInt(product.stock.toString()) 
-                    : null;
-                  
-                  if (currentStock !== null) {
-                    const quantity = orderItem.quantity || 0;
-                    const restoredStock = currentStock + quantity;
-                    
-                    console.log(`   Product ${product.id} (${product.title}):`);
-                    console.log(`      Current stock: ${currentStock}`);
-                    console.log(`      Restoring: +${quantity}`);
-                    console.log(`      New stock: ${restoredStock}`);
-                    
-                    // Restore product stock
-                    await strapi.entityService.update('api::product.product', product.id, {
-                      data: {
-                        stock: restoredStock,
-                      },
-                    });
-                    
-                    console.log(`   ✅ Stock restored for product ${product.id}`);
-                  } else {
-                    console.log(`   ⚠️  Product ${product.id} has no stock field, skipping`);
-                  }
-                }
-              }
-              console.log('-'.repeat(80));
-              strapi.log.info(`✅ Stock restored for order ${orderId} - payment was cancelled`);
-            }
-          } catch (error: any) {
-            strapi.log.error('Failed to restore stock:', error);
-          }
-        } else if (paymentStatus === 'success') {
+        // Note: Stock restoration for payments with hashId is handled by paymentService.updatePaymentStatus
+        // Stock restoration for payments without hashId is handled above
+        
+        // Note: Stock restoration is handled above for payments without hashId
+        // For payments with hashId, stock restoration is handled by paymentService.updatePaymentStatus
+        if (paymentStatus === 'success') {
           // Items are already reserved (stock reduced) when order is created
           // When payment is marked as paid, items are considered sold
           strapi.log.info(`✅ Payment confirmed for order ${orderId} - items were already reserved on order creation`);
