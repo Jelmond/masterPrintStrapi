@@ -307,18 +307,107 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           return;
         }
 
+        // In Strapi v5, relations use documentId, not id
+        const orderDocumentId = order.documentId;
+        strapi.log.info(`Looking for payment with order documentId: ${orderDocumentId}, order id: ${order.id}`);
+
         // Find payment for this order
-        const payments = await strapi.entityService.findMany('api::payment.payment', {
-          filters: {
-            order: {
-              id: parseInt(orderId),
-            },
-          },
-          limit: 1,
-        });
+        // In Strapi v5, when payment is created with order: orderDocumentId, 
+        // we need to query using the document query API or check the relation
+        let payments: any[] = [];
+        
+        // Try to find using document query (Strapi v5 way)
+        try {
+          const allPayments = await strapi.documents('api::payment.payment').findMany({
+            populate: ['order'],
+          });
+          
+          // Filter payments where order matches
+          payments = allPayments.filter((p: any) => {
+            const paymentOrder = p.order;
+            if (!paymentOrder) return false;
+            // Check if order matches by id or documentId
+            if (typeof paymentOrder === 'object') {
+              return paymentOrder.id === parseInt(orderId) || 
+                     paymentOrder.documentId === orderDocumentId;
+            }
+            return paymentOrder === orderDocumentId || paymentOrder === parseInt(orderId);
+          });
+        } catch (error: any) {
+          strapi.log.warn('Error using document query, trying entityService:', error.message);
+          // Fallback to entityService
+          const allPayments = await strapi.entityService.findMany('api::payment.payment', {
+            populate: ['order'],
+          });
+          
+          payments = allPayments.filter((p: any) => {
+            const paymentOrder = p.order;
+            if (!paymentOrder) return false;
+            if (typeof paymentOrder === 'object') {
+              return paymentOrder.id === parseInt(orderId) || 
+                     paymentOrder.documentId === orderDocumentId;
+            }
+            return paymentOrder === orderDocumentId || paymentOrder === parseInt(orderId);
+          });
+        }
 
         if (!payments || payments.length === 0) {
-          strapi.log.warn(`Payment not found for order: ${orderId}`);
+          strapi.log.warn(`Payment not found for order: ${orderId} (documentId: ${orderDocumentId})`);
+          // Try alternative: search by order id as fallback
+          const paymentsById = await strapi.entityService.findMany('api::payment.payment', {
+            filters: {
+              order: {
+                id: parseInt(orderId),
+              },
+            },
+            populate: ['order'],
+            limit: 1,
+          });
+          
+          if (paymentsById && paymentsById.length > 0) {
+            strapi.log.info(`Found payment using order id fallback`);
+            const payment = paymentsById[0];
+            const paymentStatus = status === 'success' ? 'success' : 'declined';
+            
+            // Update payment status
+            await strapi.entityService.update('api::payment.payment', payment.id, {
+              data: {
+                paymentStatus: paymentStatus,
+                ...(paymentStatus === 'success' ? { paymentDate: new Date() } : {}),
+              },
+            });
+
+            // Update order status
+            const orderStatus = paymentStatus === 'success' ? 'processing' : 'canceled';
+            await strapi.entityService.update('api::order.order', parseInt(orderId), {
+              data: { orderStatus },
+            });
+
+            // Answer callback
+            const botToken = process.env.TELEGRAM_BOT_TOKEN;
+            if (botToken && callback_query.id) {
+              const message = paymentStatus === 'success' 
+                ? '✅ Платеж отмечен как оплачен' 
+                : '❌ Платеж отмечен как не оплачен';
+              
+              try {
+                await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    callback_query_id: callback_query.id,
+                    text: message,
+                    show_alert: false,
+                  }),
+                });
+              } catch (error: any) {
+                strapi.log.warn('Failed to answer callback query:', error);
+              }
+            }
+
+            strapi.log.info(`✅ Payment status updated successfully: ${paymentStatus} for order ${orderId}`);
+            return;
+          }
           return;
         }
 
