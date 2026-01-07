@@ -101,16 +101,19 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
       // Step 1: Create order (this creates order, order items, and address)
       const orderService = strapi.service('api::order.order');
+      const shouldProcessAlphaBank = paymentMethod === 'card' && isIndividual;
+      
+      // Skip Telegram notification for AlphaBank - will be sent after payment success
       const orderResult = await orderService.createOrder({ 
         products, 
         address: addressData,
-        comment 
+        comment,
+        skipTelegram: shouldProcessAlphaBank
       });
 
       strapi.log.info(`Order created with ID: ${orderResult.order.id}, order number: ${orderResult.order.orderNumber}`);
 
-      // Step 2: Check if we need to process AlphaBank payment
-      const shouldProcessAlphaBank = paymentMethod === 'card' && isIndividual;
+      // Step 2: Check if we need to process AlphaBank payment (already determined above)
 
       console.log('\n💳 PAYMENT PROCESSING DECISION:');
       console.log('-'.repeat(80));
@@ -378,10 +381,31 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             });
 
             // Update order status
-            const orderStatus = paymentStatus === 'success' ? 'processing' : 'canceled';
+            const orderStatus = paymentStatus === 'success' ? 'success' : 'canceled';
             await strapi.entityService.update('api::order.order', parseInt(orderId), {
               data: { orderStatus },
             });
+            
+            // Send Telegram notification
+            try {
+              const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+                populate: ['order_items.product', 'address'],
+              });
+              
+              if (updatedOrder) {
+                const { sendTelegramMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
+                
+                if (paymentStatus === 'success') {
+                  const message = formatPaymentSuccessMessage(updatedOrder, payment);
+                  await sendTelegramMessage(message);
+                } else {
+                  const message = formatPaymentFailureMessage(updatedOrder, payment);
+                  await sendTelegramMessage(message);
+                }
+              }
+            } catch (error: any) {
+              strapi.log.warn('Failed to send Telegram notification:', error);
+            }
 
             // Answer callback
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -419,6 +443,7 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         
         // If payment has hashId, use it; otherwise use payment ID
         if (payment.hashId) {
+          // Payment service will handle order status update and Telegram notification
           await paymentService.updatePaymentStatus(payment.hashId, paymentStatus);
         } else {
           // For payments without hashId, update directly
@@ -430,10 +455,57 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           });
 
           // Update order status
-          const orderStatus = paymentStatus === 'success' ? 'processing' : 'canceled';
+          const orderStatus = paymentStatus === 'success' ? 'success' : 'canceled';
           await strapi.entityService.update('api::order.order', parseInt(orderId), {
             data: { orderStatus },
           });
+        }
+        
+        // Items are already reserved (stock reduced) when order is created
+        // When payment is marked as paid, items are considered sold
+        if (paymentStatus === 'success') {
+          strapi.log.info(`✅ Payment confirmed for order ${orderId} - items were already reserved on order creation`);
+        }
+
+        // Send Telegram notification with full order info when marked as paid
+        try {
+          const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+            populate: ['order_items.product', 'address'],
+          });
+          
+          if (updatedOrder) {
+            const { sendTelegramMessage, formatOrderMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
+            
+            if (paymentStatus === 'success') {
+              // Send full order information when marked as paid
+              const orderWithItems = updatedOrder as any;
+              const orderItems = orderWithItems.order_items || [];
+              // Calculate shipping and discount from order
+              const shippingCost = orderWithItems.totalAmount && orderWithItems.subtotal 
+                ? (orderWithItems.totalAmount > orderWithItems.subtotal ? orderWithItems.totalAmount - orderWithItems.subtotal : 0)
+                : 0;
+              const discount = orderWithItems.subtotal && orderWithItems.totalAmount
+                ? (orderWithItems.subtotal - (orderWithItems.totalAmount - (shippingCost > 0 ? shippingCost : 0)))
+                : 0;
+              
+              const message = formatOrderMessage(orderWithItems, orderItems, shippingCost, discount);
+              // Add buttons for payment status
+              const replyMarkup = {
+                inline_keyboard: [
+                  [
+                    { text: '✅ Оплачен', callback_data: `payment_success_${orderWithItems.id}` },
+                    { text: '❌ Не оплачен', callback_data: `payment_declined_${orderWithItems.id}` }
+                  ]
+                ]
+              };
+              await sendTelegramMessage(message, { replyMarkup });
+            } else {
+              const message = formatPaymentFailureMessage(updatedOrder, payment);
+              await sendTelegramMessage(message);
+            }
+          }
+        } catch (error: any) {
+          strapi.log.warn('Failed to send Telegram notification:', error);
         }
 
         // Answer the callback query to remove loading state

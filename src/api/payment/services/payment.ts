@@ -192,7 +192,7 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
       let orderStatus: 'pending' | 'processing' | 'canceled' | 'refunded' | 'success' = 'pending';
 
       if (status === 'success') {
-        orderStatus = 'processing';
+        orderStatus = 'success';
       } else if (status === 'declined') {
         orderStatus = 'canceled';
       } else if (status === 'refunded') {
@@ -213,8 +213,49 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
         // Send Telegram notification based on payment status
         try {
           if (status === 'success') {
-            const message = formatPaymentSuccessMessage(updatedOrder, updatedPayment);
-            await sendTelegramMessage(message);
+            // For AlphaBank payments, send full order information to Telegram
+            if (updatedPayment.hashId) {
+              // This is an AlphaBank payment - send full order details with payment buttons
+              const { formatOrderMessage, sendTelegramMessage } = await import('../../../utils/sendTelegramMessage');
+              
+              // Get order items for the message
+              const orderWithItems = updatedOrder as any;
+              const orderItems = orderWithItems.order_items || [];
+              
+              // Calculate shipping and discount from order
+              const shippingCost = orderWithItems.totalAmount && orderWithItems.subtotal 
+                ? (orderWithItems.totalAmount > orderWithItems.subtotal ? orderWithItems.totalAmount - orderWithItems.subtotal : 0)
+                : 0;
+              const discount = orderWithItems.subtotal && orderWithItems.totalAmount
+                ? (orderWithItems.subtotal - (orderWithItems.totalAmount - (shippingCost > 0 ? shippingCost : 0)))
+                : 0;
+              
+              const message = formatOrderMessage(
+                orderWithItems, 
+                orderItems, 
+                shippingCost,
+                discount
+              );
+              
+              // Add payment success info
+              const paymentInfo = `\n\n<b>✅ Платеж успешно выполнен</b>\n<b>Сумма:</b> ${updatedPayment.amount} BYN\n<b>Способ оплаты:</b> ${updatedPayment.paymentMethod === 'card' ? 'Карта (AlphaBank)' : updatedPayment.paymentMethod}`;
+              
+              // Add buttons for payment status (already paid, but buttons for reference)
+              const replyMarkup = {
+                inline_keyboard: [
+                  [
+                    { text: '✅ Оплачен', callback_data: `payment_success_${orderWithItems.id}` },
+                    { text: '❌ Не оплачен', callback_data: `payment_declined_${orderWithItems.id}` }
+                  ]
+                ]
+              };
+              
+              await sendTelegramMessage(message + paymentInfo, { replyMarkup });
+            } else {
+              // Regular payment success notification
+              const message = formatPaymentSuccessMessage(updatedOrder, updatedPayment);
+              await sendTelegramMessage(message);
+            }
           } else if (status === 'declined') {
             const message = formatPaymentFailureMessage(updatedOrder, updatedPayment);
             await sendTelegramMessage(message);

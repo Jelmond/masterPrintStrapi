@@ -30,6 +30,7 @@ interface CreateOrderInput {
   products: ProductInput[];
   address: AddressInput;
   comment?: string;
+  skipTelegram?: boolean; // Skip Telegram notification (for AlphaBank - send only after payment)
 }
 
 export default factories.createCoreService('api::order.order', ({ strapi }) => ({
@@ -88,6 +89,25 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       console.log(`   💵 Unit Price: ${unitPrice} BYN`);
       console.log(`   🔢 Quantity: ${quantity}`);
       console.log(`   💰 Line Total: ${unitPrice} × ${quantity} = ${totalPrice.toFixed(2)} BYN`);
+
+      // Reserve items: reduce stock when order is created
+      if (product.stock !== null && product.stock !== undefined) {
+        const currentStock = parseInt(product.stock.toString());
+        const newStock = Math.max(0, currentStock - quantity);
+        
+        console.log(`   📦 Stock: ${currentStock} → ${newStock} (reserved ${quantity})`);
+        
+        // Update product stock
+        await strapi.entityService.update('api::product.product', product.id, {
+          data: {
+            stock: newStock,
+          },
+        });
+        
+        console.log(`   ✅ Stock updated for product ${product.id}`);
+      } else {
+        console.log(`   ⚠️  Product has no stock field, skipping stock reservation`);
+      }
 
       // Store the product relation using documentId (Strapi v5 uses documentId for relations)
       orderItemsData.push({
@@ -281,30 +301,34 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     console.log(`   Order Items: ${verifyOrder.order_items?.length || 0} items ${verifyOrder.order_items?.length > 0 ? '✅' : '❌'}`);
     console.log('-'.repeat(80));
 
-    // Step 7: Send Telegram notification
-    console.log('\n📱 SENDING TELEGRAM NOTIFICATION:');
-    console.log('-'.repeat(80));
-    
-    try {
-      const orderWithItems = await strapi.entityService.findOne('api::order.order', order.id, {
-        populate: ['order_items.product', 'address'],
-      });
-      const message = formatOrderMessage(orderWithItems, createdOrderItems, shippingCost, discount);
-      // Add inline keyboard buttons for payment status
-      const replyMarkup = {
-        inline_keyboard: [
-          [
-            { text: '✅ Оплачен', callback_data: `payment_success_${order.id}` },
-            { text: '❌ Не оплачен', callback_data: `payment_declined_${order.id}` }
+    // Step 7: Send Telegram notification (skip for AlphaBank - will be sent after payment)
+    if (!input.skipTelegram) {
+      console.log('\n📱 SENDING TELEGRAM NOTIFICATION:');
+      console.log('-'.repeat(80));
+      
+      try {
+        const orderWithItems = await strapi.entityService.findOne('api::order.order', order.id, {
+          populate: ['order_items.product', 'address'],
+        });
+        const message = formatOrderMessage(orderWithItems, createdOrderItems, shippingCost, discount);
+        // Add inline keyboard buttons for payment status
+        const replyMarkup = {
+          inline_keyboard: [
+            [
+              { text: '✅ Оплачен', callback_data: `payment_success_${order.id}` },
+              { text: '❌ Не оплачен', callback_data: `payment_declined_${order.id}` }
+            ]
           ]
-        ]
-      };
-      await sendTelegramMessage(message, { replyMarkup });
-      console.log('✅ Telegram notification sent successfully');
-    } catch (error: any) {
-      // Don't fail order creation if Telegram fails
-      console.log('⚠️  Telegram notification failed:', error.message);
-      strapi.log.warn('Failed to send Telegram notification for order creation:', error.message);
+        };
+        await sendTelegramMessage(message, { replyMarkup });
+        console.log('✅ Telegram notification sent successfully');
+      } catch (error: any) {
+        // Don't fail order creation if Telegram fails
+        console.log('⚠️  Telegram notification failed:', error.message);
+        strapi.log.warn('Failed to send Telegram notification for order creation:', error.message);
+      }
+    } else {
+      console.log('\n📱 SKIPPING TELEGRAM NOTIFICATION (will be sent after payment for AlphaBank)');
     }
 
     // Final summary
