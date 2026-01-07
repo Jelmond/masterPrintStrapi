@@ -267,95 +267,116 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
   },
 
   async handleTelegramCallback(ctx) {
-    try {
-      const { callback_query } = ctx.request.body;
-      
-      if (!callback_query || !callback_query.data) {
-        return ctx.badRequest('Invalid callback query');
-      }
-
-      const callbackData = callback_query.data;
-      const [action, status, orderId] = callbackData.split('_');
-
-      if (action !== 'payment' || !['success', 'declined'].includes(status) || !orderId) {
-        return ctx.badRequest('Invalid callback data');
-      }
-
-      // Find payment by order ID
-      const order = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
-        populate: ['order_items', 'address'],
-      });
-
-      if (!order) {
-        return ctx.notFound('Order not found');
-      }
-
-      // Find payment for this order
-      const payments = await strapi.entityService.findMany('api::payment.payment', {
-        filters: {
-          order: {
-            id: parseInt(orderId),
-          },
-        },
-        limit: 1,
-      });
-
-      if (!payments || payments.length === 0) {
-        return ctx.notFound('Payment not found for this order');
-      }
-
-      const payment = payments[0];
-      const paymentStatus = status === 'success' ? 'success' : 'declined';
-
-      // Update payment status using the payment service
-      const paymentService = strapi.service('api::payment.payment');
-      
-      // If payment has hashId, use it; otherwise use payment ID
-      if (payment.hashId) {
-        await paymentService.updatePaymentStatus(payment.hashId, paymentStatus);
-      } else {
-        // For payments without hashId, update directly
-        await strapi.entityService.update('api::payment.payment', payment.id, {
-          data: {
-            paymentStatus: paymentStatus,
-            ...(paymentStatus === 'success' ? { paymentDate: new Date() } : {}),
-          },
-        });
-
-        // Update order status
-        const orderStatus = paymentStatus === 'success' ? 'processing' : 'canceled';
-        await strapi.entityService.update('api::order.order', parseInt(orderId), {
-          data: { orderStatus },
-        });
-      }
-
-      // Answer the callback query to remove loading state
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      if (botToken && callback_query.id) {
-        const message = paymentStatus === 'success' 
-          ? '✅ Платеж отмечен как оплачен' 
-          : '❌ Платеж отмечен как не оплачен';
+    // Telegram requires a quick response (within 60 seconds)
+    // Send 200 OK immediately, then process asynchronously
+    ctx.status = 200;
+    ctx.body = { ok: true };
+    
+    // Process asynchronously
+    setImmediate(async () => {
+      try {
+        // Log incoming request for debugging
+        strapi.log.info('Telegram webhook received:', JSON.stringify(ctx.request.body, null, 2));
         
-        try {
-          await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              callback_query_id: callback_query.id,
-              text: message,
-              show_alert: false,
-            }),
-          });
-        } catch (error: any) {
-          strapi.log.warn('Failed to answer callback query:', error);
+        // Telegram sends updates in format: { update_id, callback_query: {...} }
+        // Handle both direct callback_query and wrapped in update
+        const update = ctx.request.body;
+        const callback_query = update.callback_query || update;
+        
+        if (!callback_query || !callback_query.data) {
+          strapi.log.warn('Invalid callback query received:', JSON.stringify(update));
+          return;
         }
-      }
 
-      return ctx.send({ success: true, status: paymentStatus });
-    } catch (error: any) {
-      strapi.log.error('Telegram callback handler error:', error);
-      return ctx.internalServerError(error.message || 'Failed to process callback');
-    }
+        strapi.log.info(`Processing callback: ${callback_query.data}`);
+        const callbackData = callback_query.data;
+        const [action, status, orderId] = callbackData.split('_');
+
+        if (action !== 'payment' || !['success', 'declined'].includes(status) || !orderId) {
+          strapi.log.warn(`Invalid callback data: ${callbackData}`);
+          return;
+        }
+
+        // Find payment by order ID
+        const order = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+          populate: ['order_items', 'address'],
+        });
+
+        if (!order) {
+          strapi.log.warn(`Order not found: ${orderId}`);
+          return;
+        }
+
+        // Find payment for this order
+        const payments = await strapi.entityService.findMany('api::payment.payment', {
+          filters: {
+            order: {
+              id: parseInt(orderId),
+            },
+          },
+          limit: 1,
+        });
+
+        if (!payments || payments.length === 0) {
+          strapi.log.warn(`Payment not found for order: ${orderId}`);
+          return;
+        }
+
+        const payment = payments[0];
+        const paymentStatus = status === 'success' ? 'success' : 'declined';
+
+        // Update payment status using the payment service
+        const paymentService = strapi.service('api::payment.payment');
+        
+        // If payment has hashId, use it; otherwise use payment ID
+        if (payment.hashId) {
+          await paymentService.updatePaymentStatus(payment.hashId, paymentStatus);
+        } else {
+          // For payments without hashId, update directly
+          await strapi.entityService.update('api::payment.payment', payment.id, {
+            data: {
+              paymentStatus: paymentStatus,
+              ...(paymentStatus === 'success' ? { paymentDate: new Date() } : {}),
+            },
+          });
+
+          // Update order status
+          const orderStatus = paymentStatus === 'success' ? 'processing' : 'canceled';
+          await strapi.entityService.update('api::order.order', parseInt(orderId), {
+            data: { orderStatus },
+          });
+        }
+
+        // Answer the callback query to remove loading state
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (botToken && callback_query.id) {
+          const message = paymentStatus === 'success' 
+            ? '✅ Платеж отмечен как оплачен' 
+            : '❌ Платеж отмечен как не оплачен';
+          
+          try {
+            await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                callback_query_id: callback_query.id,
+                text: message,
+                show_alert: false,
+              }),
+            });
+          } catch (error: any) {
+            strapi.log.warn('Failed to answer callback query:', error);
+          }
+        }
+
+        strapi.log.info(`✅ Payment status updated successfully: ${paymentStatus} for order ${orderId}`);
+      } catch (error: any) {
+        strapi.log.error('Telegram callback handler error:', error);
+        strapi.log.error('Error stack:', error.stack);
+      }
+    });
+    
+    return;
   },
 
   async setupTelegramWebhook(ctx) {

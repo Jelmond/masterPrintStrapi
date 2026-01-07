@@ -16,23 +16,34 @@ async function setupTelegramWebhook(strapi: Core.Strapi) {
   }
 
   try {
+    // Remove trailing dot if present (fix for mppshop.by.)
+    const cleanWebhookUrl = webhookUrl.replace(/\.\/api/, '/api');
+    
+    strapi.log.info(`Setting up Telegram webhook: ${cleanWebhookUrl}`);
+    
     const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: webhookUrl,
+        url: cleanWebhookUrl,
       }),
     });
 
-    const result = (await response.json()) as { ok: boolean; description?: string };
+    const result = (await response.json()) as { ok: boolean; description?: string; result?: any };
 
     if (result.ok) {
-      strapi.log.info(`✅ Telegram webhook configured successfully: ${webhookUrl}`);
+      strapi.log.info(`✅ Telegram webhook configured successfully: ${cleanWebhookUrl}`);
+      // Also verify webhook info
+      const infoResponse = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
+      const info = await infoResponse.json();
+      strapi.log.info(`Webhook info:`, JSON.stringify(info, null, 2));
     } else {
-      strapi.log.warn(`⚠️  Failed to configure Telegram webhook: ${result.description || 'Unknown error'}`);
+      strapi.log.error(`⚠️  Failed to configure Telegram webhook: ${result.description || 'Unknown error'}`);
+      strapi.log.error(`Full response:`, JSON.stringify(result, null, 2));
     }
   } catch (error: any) {
-    strapi.log.warn(`⚠️  Failed to setup Telegram webhook: ${error.message}`);
+    strapi.log.error(`⚠️  Failed to setup Telegram webhook: ${error.message}`);
+    strapi.log.error(`Error stack:`, error.stack);
   }
 }
 
