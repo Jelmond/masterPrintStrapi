@@ -456,9 +456,12 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           });
         }
 
+        strapi.log.info(`Found ${payments.length} payment(s) for order ${orderIdNum}`);
+        
         if (!payments || payments.length === 0) {
           strapi.log.warn(`Payment not found for order: ${orderIdNum} (documentId: ${orderDocumentId})`);
           // Try alternative: search by order id as fallback
+          strapi.log.info(`Trying fallback search for payment with order id: ${orderIdNum}`);
           const paymentsById = await strapi.entityService.findMany('api::payment.payment', {
             filters: {
               order: {
@@ -468,6 +471,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             populate: ['order'],
             limit: 1,
           });
+          
+          strapi.log.info(`Fallback search found ${paymentsById.length} payment(s)`);
           
           if (paymentsById && paymentsById.length > 0) {
             strapi.log.info(`Found payment using order id fallback`);
@@ -606,17 +611,28 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           return;
         }
 
+        // Get the actual order ID from the payment's order relation
+        const paymentOrderId = typeof payment.order === 'object' ? payment.order.id : orderIdNum;
+        strapi.log.info(`Payment order ID: ${paymentOrderId}, Callback order ID: ${orderIdNum}`);
+        
+        // Use the order ID from payment if it differs from callback
+        const actualOrderId = paymentOrderId || orderIdNum;
+        strapi.log.info(`Using order ID: ${actualOrderId} for status update`);
+        
         // If payment has hashId, use it; otherwise use payment ID
         if (payment.hashId) {
           // Payment service will handle order status update and Telegram notification
+          strapi.log.info(`Updating payment status via service for hashId: ${payment.hashId}`);
           await paymentService.updatePaymentStatus(payment.hashId, paymentStatus);
           
-          // Get updated order for confirmation message
-          const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
+          // Get updated order for confirmation message - use actual order ID
+          strapi.log.info(`Fetching updated order with ID: ${actualOrderId}`);
+          const updatedOrder = await strapi.entityService.findOne('api::order.order', actualOrderId, {
             populate: ['order_items.product', 'address'],
           });
           
           if (updatedOrder) {
+            strapi.log.info(`✅ Updated order found: ID=${updatedOrder.id}, orderNumber=${updatedOrder.orderNumber}`);
             // Send confirmation message to admin chat
             try {
               strapi.log.info('📱 Sending Telegram confirmation message...');
@@ -640,7 +656,24 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
               strapi.log.error('Error stack:', error.stack);
             }
           } else {
-            strapi.log.warn('Updated order not found, cannot send Telegram message');
+            strapi.log.warn(`Updated order not found for ID: ${actualOrderId}, cannot send Telegram message`);
+            // Try to find by documentId as fallback
+            if (typeof payment.order === 'object' && payment.order.documentId) {
+              strapi.log.info(`Trying to find order by documentId: ${payment.order.documentId}`);
+              const orderByDocId = await strapi.documents('api::order.order').findOne({
+                documentId: payment.order.documentId,
+                populate: ['order_items.product', 'address'],
+              });
+              if (orderByDocId) {
+                strapi.log.info(`✅ Found order by documentId: ID=${orderByDocId.id}`);
+                const orderNumber = orderByDocId.orderNumber || orderByDocId.id;
+                const statusText = paymentStatus === 'success' ? 'оплачен' : 'отменен';
+                const emoji = paymentStatus === 'success' ? '✅' : '❌';
+                const message = `${emoji} Для заказа <b>#${orderNumber}</b> статус сменился на <b>${statusText}</b>`;
+                const { sendTelegramMessage } = await import('../../../utils/sendTelegramMessage');
+                await sendTelegramMessage(message);
+              }
+            }
           }
         } else {
           // For payments without hashId, update directly
@@ -651,27 +684,57 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             },
           });
 
+          // Get the actual order ID from the payment's order relation
+          const paymentOrderId = typeof payment.order === 'object' ? payment.order.id : orderIdNum;
+          strapi.log.info(`Payment order ID: ${paymentOrderId}, Callback order ID: ${orderIdNum}`);
+          
+          // Use the order ID from payment if it differs from callback
+          const actualOrderId = paymentOrderId || orderIdNum;
+          strapi.log.info(`Using order ID: ${actualOrderId} for status update`);
+          
           // Update order status
           const orderStatus = paymentStatus === 'success' ? 'success' : 'canceled';
-          await strapi.entityService.update('api::order.order', orderIdNum, {
+          strapi.log.info(`Updating order ${actualOrderId} status to: ${orderStatus}`);
+          await strapi.entityService.update('api::order.order', actualOrderId, {
             data: { orderStatus },
           });
           
           // Restore stock when payment is cancelled/declined (for payments without hashId)
           if (paymentStatus === 'declined') {
             const orderWithItems = orderBeforeUpdate as any;
-            await restoreStockForOrder(orderWithItems, orderIdNum, strapi);
+            await restoreStockForOrder(orderWithItems, actualOrderId, strapi);
           }
           
           // Get order with items for Telegram notification
-          const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
+          strapi.log.info(`Fetching updated order with ID: ${actualOrderId}`);
+          const updatedOrder = await strapi.entityService.findOne('api::order.order', actualOrderId, {
             populate: ['order_items.product', 'address'],
           });
           
           if (!updatedOrder) {
-            strapi.log.warn(`Order not found after update: ${orderIdNum}`);
+            strapi.log.warn(`Order not found after update: ${actualOrderId}`);
+            // Try to find by documentId as fallback
+            if (typeof payment.order === 'object' && payment.order.documentId) {
+              strapi.log.info(`Trying to find order by documentId: ${payment.order.documentId}`);
+              const orderByDocId = await strapi.documents('api::order.order').findOne({
+                documentId: payment.order.documentId,
+                populate: ['order_items.product', 'address'],
+              });
+              if (orderByDocId) {
+                strapi.log.info(`✅ Found order by documentId: ID=${orderByDocId.id}`);
+                const orderNumber = orderByDocId.orderNumber || orderByDocId.id;
+                const statusText = paymentStatus === 'success' ? 'оплачен' : 'отменен';
+                const emoji = paymentStatus === 'success' ? '✅' : '❌';
+                const message = `${emoji} Для заказа <b>#${orderNumber}</b> статус сменился на <b>${statusText}</b>`;
+                const { sendTelegramMessage } = await import('../../../utils/sendTelegramMessage');
+                await sendTelegramMessage(message);
+                return;
+              }
+            }
             return;
           }
+          
+          strapi.log.info(`✅ Updated order found: ID=${updatedOrder.id}, orderNumber=${updatedOrder.orderNumber}`);
 
           const orderWithItems = updatedOrder as any;
           
