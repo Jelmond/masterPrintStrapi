@@ -72,13 +72,27 @@ export async function sendTelegramMessage(
 }
 
 /**
+ * Format payment method name for display
+ */
+function formatPaymentMethodName(paymentMethod: string): string {
+  const methodMap: { [key: string]: string } = {
+    'ERIP': 'ЕРИП',
+    'card': 'Карта (AlphaBank)',
+    'paymentAccount': 'Расчетный счет',
+    'selfShipping': 'Самовывоз (наличные/карта)',
+  };
+  return methodMap[paymentMethod] || paymentMethod;
+}
+
+/**
  * Format order information for Telegram message
  */
 export function formatOrderMessage(
   order: any, 
   orderItems: any[] = [], 
   shippingCost: number = 0, 
-  discount: number = 0
+  discount: number = 0,
+  paymentMethod?: string
 ): string {
   // Calculate discount percentage if discount exists
   const discountPercentage = order.subtotal > 0 && discount > 0 
@@ -198,12 +212,18 @@ export function formatOrderMessage(
     }
   }
 
+  // Add payment method info if provided
+  let paymentMethodInfo = '';
+  if (paymentMethod) {
+    paymentMethodInfo = `\n<b>Способ оплаты:</b> ${formatPaymentMethodName(paymentMethod)}`;
+  }
+
   return `
 <b>🛒 Новый заказ создан</b>
 
 <b>Номер заказа:</b> #${order.orderNumber}
 <b>Статус:</b> ${order.orderStatus}
-<b>Дата:</b> ${new Date(order.orderDate).toLocaleString('ru-RU')}
+<b>Дата:</b> ${new Date(order.orderDate).toLocaleString('ru-RU')}${paymentMethodInfo}
 
 ${addressInfo}
 

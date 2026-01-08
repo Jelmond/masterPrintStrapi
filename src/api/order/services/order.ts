@@ -31,6 +31,7 @@ interface CreateOrderInput {
   address: AddressInput;
   comment?: string;
   skipTelegram?: boolean; // Skip Telegram notification (for AlphaBank - send only after payment)
+  paymentMethod?: string; // Payment method for Telegram message
 }
 
 export default factories.createCoreService('api::order.order', ({ strapi }) => ({
@@ -310,7 +311,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
         const orderWithItems = await strapi.entityService.findOne('api::order.order', order.id, {
           populate: ['order_items.product', 'address'],
         });
-        const message = formatOrderMessage(orderWithItems, createdOrderItems, shippingCost, discount);
+        const message = formatOrderMessage(orderWithItems, createdOrderItems, shippingCost, discount, input.paymentMethod);
         // Add inline keyboard buttons for payment status
         const replyMarkup = {
           inline_keyboard: [

@@ -303,11 +303,12 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
                 orderWithItems, 
                 orderItems, 
                 shippingCost,
-                discount
+                discount,
+                updatedPayment.paymentMethod // Pass payment method
               );
               
               // Add payment success info
-              const paymentInfo = `\n\n<b>✅ Платеж успешно выполнен</b>\n<b>Сумма:</b> ${updatedPayment.amount} BYN\n<b>Способ оплаты:</b> ${updatedPayment.paymentMethod === 'card' ? 'Карта (AlphaBank)' : updatedPayment.paymentMethod}`;
+              const paymentInfo = `\n\n<b>✅ Платеж успешно выполнен</b>\n<b>Сумма:</b> ${updatedPayment.amount} BYN`;
               
               // Add buttons for payment status (already paid, but buttons for reference)
               const replyMarkup = {
