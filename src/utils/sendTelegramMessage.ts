@@ -79,6 +79,7 @@ function formatPaymentMethodName(paymentMethod: string): string {
     'ERIP': 'ЕРИП',
     'card': 'Карта (AlphaBank)',
     'paymentAccount': 'Расчетный счет',
+    'pickupPayment': 'Самовывоз (наличные/карта)',
     'selfShipping': 'Самовывоз (наличные/карта)',
   };
   return methodMap[paymentMethod] || paymentMethod;

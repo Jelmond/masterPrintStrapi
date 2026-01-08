@@ -603,7 +603,7 @@ export interface ApiPaymentPayment extends Struct.CollectionTypeSchema {
     order: Schema.Attribute.Relation<'oneToOne', 'api::order.order'>;
     paymentDate: Schema.Attribute.DateTime;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['paymentAccount', 'ERIP', 'card']
+      ['paymentAccount', 'ERIP', 'card', 'pickupPayment']
     >;
     paymentStatus: Schema.Attribute.Enumeration<
       ['pending', 'declined', 'success', 'refunded']

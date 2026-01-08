@@ -121,12 +121,16 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
       // Validate payment method based on isIndividual
       if (isIndividual) {
-        if (!['ERIP', 'card'].includes(paymentMethod)) {
-          return ctx.badRequest('For individuals, paymentMethod must be ERIP or card');
+        if (!['ERIP', 'card', 'pickupPayment'].includes(paymentMethod)) {
+          return ctx.badRequest('For individuals, paymentMethod must be ERIP, card, or pickupPayment');
         }
         // Validate individual fields
         if (!fullName || !email || !phone || !city || !address) {
           return ctx.badRequest('For individuals, fullName, email, phone, city, and address are required');
+        }
+        // pickupPayment is only valid for selfShipping
+        if (paymentMethod === 'pickupPayment' && type !== 'selfShipping') {
+          return ctx.badRequest('pickupPayment is only available for selfShipping (self-pickup)');
         }
       } else {
         if (!['ERIP', 'paymentAccount'].includes(paymentMethod)) {
@@ -213,8 +217,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           let emailContent;
           
           // Determine which email template to use
-          if (type === 'selfShipping') {
-            // Scenario 2: Self-pickup (cash/card on pickup)
+          if (type === 'selfShipping' || paymentMethod === 'pickupPayment') {
+            // Scenario 2: Self-pickup (cash/card on pickup) or pickupPayment
             emailContent = formatOrderCreatedEmailSelfPickup(
               orderResult.order.orderNumber,
               orderResult.orderItems,
@@ -479,6 +483,101 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             const payment = paymentsById[0];
             const paymentStatus = status === 'success' ? 'success' : 'declined';
             
+            // Check if payment already has this status
+            const currentPaymentStatus = payment.paymentStatus;
+            strapi.log.info(`Current payment status: ${currentPaymentStatus}, requested status: ${paymentStatus}`);
+            
+            if (currentPaymentStatus === paymentStatus) {
+              // Payment already has this status, just send notification
+              strapi.log.info(`Payment already has status ${paymentStatus}, sending notification only`);
+              
+              const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
+                populate: ['order_items.product', 'address'],
+              });
+              
+              if (updatedOrder) {
+                const orderNumber = updatedOrder.orderNumber || updatedOrder.id;
+                const statusText = paymentStatus === 'success' ? 'оплачен' : 'отменен';
+                const emoji = paymentStatus === 'success' ? '✅' : '❌';
+                const message = `${emoji} Заказ <b>#${orderNumber}</b> уже был помечен как <b>${statusText}</b>`;
+                
+                try {
+                  const { sendTelegramMessage } = await import('../../../utils/sendTelegramMessage');
+                  await sendTelegramMessage(message);
+                  strapi.log.info('✅ Notification sent: order already has this status');
+                } catch (error: any) {
+                  strapi.log.error('Failed to send notification:', error);
+                }
+              }
+              
+              // Answer callback query
+              const botToken = process.env.TELEGRAM_BOT_TOKEN;
+              if (botToken && callback_query.id) {
+                try {
+                  await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      callback_query_id: callback_query.id,
+                      text: `Заказ уже помечен как ${paymentStatus === 'success' ? 'оплачен' : 'отменен'}`,
+                      show_alert: true,
+                    }),
+                  });
+                } catch (error: any) {
+                  strapi.log.warn('Failed to answer callback query:', error);
+                }
+              }
+              
+              return;
+            }
+            
+            // Check if trying to reverse the status
+            if ((currentPaymentStatus === 'success' && paymentStatus === 'declined') ||
+                (currentPaymentStatus === 'declined' && paymentStatus === 'success')) {
+              // Don't allow reversing status, just send notification
+              strapi.log.info(`Attempted to reverse status from ${currentPaymentStatus} to ${paymentStatus}, sending notification only`);
+              
+              const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
+                populate: ['order_items.product', 'address'],
+              });
+              
+              if (updatedOrder) {
+                const orderNumber = updatedOrder.orderNumber || updatedOrder.id;
+                const currentStatusText = currentPaymentStatus === 'success' ? 'оплачен' : 'отменен';
+                const requestedStatusText = paymentStatus === 'success' ? 'оплачен' : 'отменен';
+                const emoji = '⚠️';
+                const message = `${emoji} Заказ <b>#${orderNumber}</b> уже был помечен как <b>${currentStatusText}</b>. Нельзя изменить статус на <b>${requestedStatusText}</b>.`;
+                
+                try {
+                  const { sendTelegramMessage } = await import('../../../utils/sendTelegramMessage');
+                  await sendTelegramMessage(message);
+                  strapi.log.info('✅ Notification sent: cannot reverse order status');
+                } catch (error: any) {
+                  strapi.log.error('Failed to send notification:', error);
+                }
+              }
+              
+              // Answer callback query
+              const botToken = process.env.TELEGRAM_BOT_TOKEN;
+              if (botToken && callback_query.id) {
+                try {
+                  await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      callback_query_id: callback_query.id,
+                      text: `Заказ уже помечен как ${currentPaymentStatus === 'success' ? 'оплачен' : 'отменен'}. Нельзя изменить статус.`,
+                      show_alert: true,
+                    }),
+                  });
+                } catch (error: any) {
+                  strapi.log.warn('Failed to answer callback query:', error);
+                }
+              }
+              
+              return;
+            }
+            
             // Update payment status
             await strapi.entityService.update('api::payment.payment', payment.id, {
               data: {
@@ -597,6 +696,89 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
         const payment = payments[0];
         const paymentStatus = status === 'success' ? 'success' : 'declined';
+        
+        // Check if payment already has this status
+        const currentPaymentStatus = payment.paymentStatus;
+        strapi.log.info(`Current payment status: ${currentPaymentStatus}, requested status: ${paymentStatus}`);
+        
+        if (currentPaymentStatus === paymentStatus) {
+          // Payment already has this status, just send notification
+          strapi.log.info(`Payment already has status ${paymentStatus}, sending notification only`);
+          
+          const orderNumber = order.orderNumber || order.id;
+          const statusText = paymentStatus === 'success' ? 'оплачен' : 'отменен';
+          const emoji = paymentStatus === 'success' ? '✅' : '❌';
+          const message = `${emoji} Заказ <b>#${orderNumber}</b> уже был помечен как <b>${statusText}</b>`;
+          
+          try {
+            const { sendTelegramMessage } = await import('../../../utils/sendTelegramMessage');
+            await sendTelegramMessage(message);
+            strapi.log.info('✅ Notification sent: order already has this status');
+          } catch (error: any) {
+            strapi.log.error('Failed to send notification:', error);
+          }
+          
+          // Answer callback query
+          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+          if (botToken && callback_query.id) {
+            try {
+              await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  callback_query_id: callback_query.id,
+                  text: `Заказ уже помечен как ${statusText}`,
+                  show_alert: true,
+                }),
+              });
+            } catch (error: any) {
+              strapi.log.warn('Failed to answer callback query:', error);
+            }
+          }
+          
+          return;
+        }
+        
+        // Check if trying to reverse the status (e.g., mark as declined when already success)
+        if ((currentPaymentStatus === 'success' && paymentStatus === 'declined') ||
+            (currentPaymentStatus === 'declined' && paymentStatus === 'success')) {
+          // Don't allow reversing status, just send notification
+          strapi.log.info(`Attempted to reverse status from ${currentPaymentStatus} to ${paymentStatus}, sending notification only`);
+          
+          const orderNumber = order.orderNumber || order.id;
+          const currentStatusText = currentPaymentStatus === 'success' ? 'оплачен' : 'отменен';
+          const requestedStatusText = paymentStatus === 'success' ? 'оплачен' : 'отменен';
+          const emoji = '⚠️';
+          const message = `${emoji} Заказ <b>#${orderNumber}</b> уже был помечен как <b>${currentStatusText}</b>. Нельзя изменить статус на <b>${requestedStatusText}</b>.`;
+          
+          try {
+            const { sendTelegramMessage } = await import('../../../utils/sendTelegramMessage');
+            await sendTelegramMessage(message);
+            strapi.log.info('✅ Notification sent: cannot reverse order status');
+          } catch (error: any) {
+            strapi.log.error('Failed to send notification:', error);
+          }
+          
+          // Answer callback query
+          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+          if (botToken && callback_query.id) {
+            try {
+              await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  callback_query_id: callback_query.id,
+                  text: `Заказ уже помечен как ${currentStatusText}. Нельзя изменить статус.`,
+                  show_alert: true,
+                }),
+              });
+            } catch (error: any) {
+              strapi.log.warn('Failed to answer callback query:', error);
+            }
+          }
+          
+          return;
+        }
 
         // Update payment status using the payment service
         const paymentService = strapi.service('api::payment.payment');

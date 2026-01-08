@@ -16,7 +16,8 @@
       "enum": [
         "paymentAccount",
         "ERIP",
-        "card"
+        "card",
+        "pickupPayment"
       ]
     },
     "amount": {
