@@ -359,20 +359,55 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
         strapi.log.info(`Processing callback: ${callback_query.data}`);
         const callbackData = callback_query.data;
-        const [action, status, orderId] = callbackData.split('_');
+        
+        // Parse callback data: payment_success_61 or payment_declined_61
+        const parts = callbackData.split('_');
+        if (parts.length < 3) {
+          strapi.log.warn(`Invalid callback data format: ${callbackData}`);
+          return;
+        }
+        
+        const action = parts[0];
+        const status = parts[1];
+        const orderId = parts.slice(2).join('_'); // In case orderId has underscores (unlikely but safe)
+        
+        strapi.log.info(`Parsed callback: action=${action}, status=${status}, orderId=${orderId}`);
 
         if (action !== 'payment' || !['success', 'declined'].includes(status) || !orderId) {
-          strapi.log.warn(`Invalid callback data: ${callbackData}`);
+          strapi.log.warn(`Invalid callback data: ${callbackData} (action=${action}, status=${status}, orderId=${orderId})`);
+          return;
+        }
+
+        const orderIdNum = parseInt(orderId);
+        if (isNaN(orderIdNum)) {
+          strapi.log.warn(`Invalid order ID (not a number): ${orderId}`);
           return;
         }
 
         // Find payment by order ID
-        const order = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+        const order = await strapi.entityService.findOne('api::order.order', orderIdNum, {
           populate: ['order_items', 'address'],
         });
 
         if (!order) {
-          strapi.log.warn(`Order not found: ${orderId}`);
+          strapi.log.warn(`Order not found: ${orderIdNum} (parsed from: ${callbackData})`);
+          // Answer callback query with error message
+          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+          if (botToken && callback_query.id) {
+            try {
+              await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  callback_query_id: callback_query.id,
+                  text: `❌ Заказ #${orderIdNum} не найден`,
+                  show_alert: true,
+                }),
+              });
+            } catch (error: any) {
+              strapi.log.warn('Failed to answer callback query:', error);
+            }
+          }
           return;
         }
 
@@ -397,10 +432,10 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             if (!paymentOrder) return false;
             // Check if order matches by id or documentId
             if (typeof paymentOrder === 'object') {
-              return paymentOrder.id === parseInt(orderId) || 
+              return paymentOrder.id === orderIdNum || 
                      paymentOrder.documentId === orderDocumentId;
             }
-            return paymentOrder === orderDocumentId || paymentOrder === parseInt(orderId);
+            return paymentOrder === orderDocumentId || paymentOrder === orderIdNum;
           });
         } catch (error: any) {
           strapi.log.warn('Error using document query, trying entityService:', error.message);
@@ -413,20 +448,20 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             const paymentOrder = p.order;
             if (!paymentOrder) return false;
             if (typeof paymentOrder === 'object') {
-              return paymentOrder.id === parseInt(orderId) || 
+              return paymentOrder.id === orderIdNum || 
                      paymentOrder.documentId === orderDocumentId;
             }
-            return paymentOrder === orderDocumentId || paymentOrder === parseInt(orderId);
+            return paymentOrder === orderDocumentId || paymentOrder === orderIdNum;
           });
         }
 
         if (!payments || payments.length === 0) {
-          strapi.log.warn(`Payment not found for order: ${orderId} (documentId: ${orderDocumentId})`);
+          strapi.log.warn(`Payment not found for order: ${orderIdNum} (documentId: ${orderDocumentId})`);
           // Try alternative: search by order id as fallback
           const paymentsById = await strapi.entityService.findMany('api::payment.payment', {
             filters: {
               order: {
-                id: parseInt(orderId),
+                id: orderIdNum,
               },
             },
             populate: ['order'],
@@ -448,14 +483,14 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
             // Update order status
             const orderStatus = paymentStatus === 'success' ? 'success' : 'canceled';
-            await strapi.entityService.update('api::order.order', parseInt(orderId), {
+            await strapi.entityService.update('api::order.order', orderIdNum, {
               data: { orderStatus },
             });
             
             // Restore stock when payment is cancelled
             if (paymentStatus === 'declined') {
               try {
-                const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+                const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
                   populate: ['order_items.product', 'address'],
                 });
                 
@@ -496,7 +531,7 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             
             // Send Telegram notification
             try {
-              const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+              const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
                 populate: ['order_items.product', 'address'],
               });
               
@@ -504,10 +539,10 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
                 const { sendTelegramMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
                 
                 if (paymentStatus === 'success') {
-                  const message = formatPaymentSuccessMessage(updatedOrder, payment);
+                  const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formatPaymentSuccessMessage(updatedOrder, payment)}`;
                   await sendTelegramMessage(message);
                 } else {
-                  const message = formatPaymentFailureMessage(updatedOrder, payment);
+                  const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formatPaymentFailureMessage(updatedOrder, payment)}`;
                   await sendTelegramMessage(message);
                 }
               }
@@ -529,15 +564,16 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
                   body: JSON.stringify({
                     callback_query_id: callback_query.id,
                     text: message,
-                    show_alert: false,
+                    show_alert: true, // Show as alert so user sees it
                   }),
                 });
+                strapi.log.info(`✅ Callback query answered: ${message}`);
               } catch (error: any) {
                 strapi.log.warn('Failed to answer callback query:', error);
               }
             }
 
-            strapi.log.info(`✅ Payment status updated successfully: ${paymentStatus} for order ${orderId}`);
+            strapi.log.info(`✅ Payment status updated successfully: ${paymentStatus} for order ${orderIdNum}`);
             return;
           }
           return;
@@ -563,6 +599,28 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         if (payment.hashId) {
           // Payment service will handle order status update and Telegram notification
           await paymentService.updatePaymentStatus(payment.hashId, paymentStatus);
+          
+          // Get updated order for confirmation message
+          const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
+            populate: ['order_items.product', 'address'],
+          });
+          
+          if (updatedOrder) {
+            // Send confirmation message to admin chat
+            try {
+              const { sendTelegramMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
+              
+              if (paymentStatus === 'success') {
+                const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formatPaymentSuccessMessage(updatedOrder, payment)}`;
+                await sendTelegramMessage(message);
+              } else {
+                const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formatPaymentFailureMessage(updatedOrder, payment)}`;
+                await sendTelegramMessage(message);
+              }
+            } catch (error: any) {
+              strapi.log.warn('Failed to send confirmation Telegram notification:', error);
+            }
+          }
         } else {
           // For payments without hashId, update directly
           await strapi.entityService.update('api::payment.payment', payment.id, {
@@ -574,72 +632,49 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
           // Update order status
           const orderStatus = paymentStatus === 'success' ? 'success' : 'canceled';
-          await strapi.entityService.update('api::order.order', parseInt(orderId), {
+          await strapi.entityService.update('api::order.order', orderIdNum, {
             data: { orderStatus },
           });
           
           // Restore stock when payment is cancelled/declined (for payments without hashId)
           if (paymentStatus === 'declined') {
             const orderWithItems = orderBeforeUpdate as any;
-            await restoreStockForOrder(orderWithItems, orderId, strapi);
+            await restoreStockForOrder(orderWithItems, orderIdNum, strapi);
           }
-        }
-        
-        // Get order with items for Telegram notification
-        const updatedOrder = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
-          populate: ['order_items.product', 'address'],
-        });
-        
-        if (!updatedOrder) {
-          strapi.log.warn(`Order not found: ${orderId}`);
-          return;
-        }
+          
+          // Get order with items for Telegram notification
+          const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
+            populate: ['order_items.product', 'address'],
+          });
+          
+          if (!updatedOrder) {
+            strapi.log.warn(`Order not found after update: ${orderIdNum}`);
+            return;
+          }
 
-        const orderWithItems = updatedOrder as any;
-        
-        // Note: Stock restoration for payments with hashId is handled by paymentService.updatePaymentStatus
-        // Stock restoration for payments without hashId is handled above
-        
-        // Note: Stock restoration is handled above for payments without hashId
-        // For payments with hashId, stock restoration is handled by paymentService.updatePaymentStatus
-        if (paymentStatus === 'success') {
-          // Items are already reserved (stock reduced) when order is created
-          // When payment is marked as paid, items are considered sold
-          strapi.log.info(`✅ Payment confirmed for order ${orderId} - items were already reserved on order creation`);
-        }
-
-        // Send Telegram notification with full order info when marked as paid
-        try {
-          const { sendTelegramMessage, formatOrderMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
+          const orderWithItems = updatedOrder as any;
           
           if (paymentStatus === 'success') {
-            // Send full order information when marked as paid
-            const orderItems = orderWithItems.order_items || [];
-            // Calculate shipping and discount from order
-            const shippingCost = orderWithItems.totalAmount && orderWithItems.subtotal 
-              ? (orderWithItems.totalAmount > orderWithItems.subtotal ? orderWithItems.totalAmount - orderWithItems.subtotal : 0)
-              : 0;
-            const discount = orderWithItems.subtotal && orderWithItems.totalAmount
-              ? (orderWithItems.subtotal - (orderWithItems.totalAmount - (shippingCost > 0 ? shippingCost : 0)))
-              : 0;
-            
-            const message = formatOrderMessage(orderWithItems, orderItems, shippingCost, discount);
-            // Add buttons for payment status
-            const replyMarkup = {
-              inline_keyboard: [
-                [
-                  { text: '✅ Оплачен', callback_data: `payment_success_${orderWithItems.id}` },
-                  { text: '❌ Не оплачен', callback_data: `payment_declined_${orderWithItems.id}` }
-                ]
-              ]
-            };
-            await sendTelegramMessage(message, { replyMarkup });
-          } else {
-            const message = formatPaymentFailureMessage(orderWithItems, payment);
-            await sendTelegramMessage(message);
+            // Items are already reserved (stock reduced) when order is created
+            // When payment is marked as paid, items are considered sold
+            strapi.log.info(`✅ Payment confirmed for order ${orderIdNum} - items were already reserved on order creation`);
           }
-        } catch (error: any) {
-          strapi.log.warn('Failed to send Telegram notification:', error);
+
+          // Send Telegram notification with full order info when marked as paid
+          try {
+            const { sendTelegramMessage, formatOrderMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
+            
+            if (paymentStatus === 'success') {
+              // Send confirmation message
+              const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formatPaymentSuccessMessage(orderWithItems, payment)}`;
+              await sendTelegramMessage(message);
+            } else {
+              const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formatPaymentFailureMessage(orderWithItems, payment)}`;
+              await sendTelegramMessage(message);
+            }
+          } catch (error: any) {
+            strapi.log.warn('Failed to send Telegram notification:', error);
+          }
         }
 
         // Answer the callback query to remove loading state
@@ -656,15 +691,16 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
               body: JSON.stringify({
                 callback_query_id: callback_query.id,
                 text: message,
-                show_alert: false,
+                show_alert: true, // Show as alert so user sees it
               }),
             });
+            strapi.log.info(`✅ Callback query answered: ${message}`);
           } catch (error: any) {
             strapi.log.warn('Failed to answer callback query:', error);
           }
         }
 
-        strapi.log.info(`✅ Payment status updated successfully: ${paymentStatus} for order ${orderId}`);
+        strapi.log.info(`✅ Payment status updated successfully: ${paymentStatus} for order ${orderIdNum}`);
       } catch (error: any) {
         strapi.log.error('Telegram callback handler error:', error);
         strapi.log.error('Error stack:', error.stack);
