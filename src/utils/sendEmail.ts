@@ -11,6 +11,18 @@ interface EmailOptions {
   from?: string;
 }
 
+const EMAIL_AUTO_MESSAGE = `
+<br><br>
+<div style="background-color: #f0f0f0; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0; border-radius: 5px;">
+  <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.6;">
+    <strong style="color: #ff6b6b; font-size: 15px;">⚠️ Это автоматическое письмо</strong><br>
+    <strong>Пожалуйста, не отвечайте на него</strong><br><br>
+    Если у вас возникли вопросы, мы с радостью поможем 😊<br>
+    Свяжитесь с нами через сайт или по контактам ниже.
+  </p>
+</div>
+`;
+
 const EMAIL_FOOTER = `
 <br><br>
 С уважением, команда MPP.Shop<br>
@@ -130,6 +142,7 @@ export function formatOrderCreatedEmailERIP(
     <p><b>Детали заказа:</b></p>
     <p>${itemsList}</p>
     <p><b>Итоговая сумма:</b> ${totalAmount.toFixed(2)} BYN</p>
+    ${EMAIL_AUTO_MESSAGE}
     ${EMAIL_FOOTER}
   `;
 
@@ -157,6 +170,7 @@ export function formatOrderCreatedEmailSelfPickup(
     <p><b>Детали заказа:</b></p>
     <p>${itemsList}</p>
     <p><b>Итоговая сумма:</b> ${totalAmount.toFixed(2)} BYN</p>
+    ${EMAIL_AUTO_MESSAGE}
     ${EMAIL_FOOTER}
   `;
 
@@ -185,6 +199,7 @@ export function formatOrderPaidEmailAlphaBank(
     <p>${itemsList}</p>
     <p><b>Итоговая сумма:</b> ${totalAmount.toFixed(2)} BYN</p>
     <p>Когда заказ будет готов, вы получите дополнительное уведомление.</p>
+    ${EMAIL_AUTO_MESSAGE}
     ${EMAIL_FOOTER}
   `;
 

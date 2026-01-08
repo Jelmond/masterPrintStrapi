@@ -531,6 +531,7 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
             
             // Send Telegram notification
             try {
+              strapi.log.info('📱 Sending Telegram confirmation message (fallback path)...');
               const updatedOrder = await strapi.entityService.findOne('api::order.order', orderIdNum, {
                 populate: ['order_items.product', 'address'],
               });
@@ -539,15 +540,32 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
                 const { sendTelegramMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
                 
                 if (paymentStatus === 'success') {
-                  const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formatPaymentSuccessMessage(updatedOrder, payment)}`;
-                  await sendTelegramMessage(message);
+                  const formattedMessage = formatPaymentSuccessMessage(updatedOrder, payment);
+                  const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formattedMessage}`;
+                  strapi.log.info('Sending success message to Telegram');
+                  const result = await sendTelegramMessage(message);
+                  if (result) {
+                    strapi.log.info('✅ Telegram confirmation message sent successfully');
+                  } else {
+                    strapi.log.warn('⚠️ Telegram message sending returned false');
+                  }
                 } else {
-                  const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formatPaymentFailureMessage(updatedOrder, payment)}`;
-                  await sendTelegramMessage(message);
+                  const formattedMessage = formatPaymentFailureMessage(updatedOrder, payment);
+                  const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formattedMessage}`;
+                  strapi.log.info('Sending failure message to Telegram');
+                  const result = await sendTelegramMessage(message);
+                  if (result) {
+                    strapi.log.info('✅ Telegram confirmation message sent successfully');
+                  } else {
+                    strapi.log.warn('⚠️ Telegram message sending returned false');
+                  }
                 }
+              } else {
+                strapi.log.warn('Updated order not found in fallback path, cannot send Telegram message');
               }
             } catch (error: any) {
-              strapi.log.warn('Failed to send Telegram notification:', error);
+              strapi.log.error('❌ Failed to send Telegram notification:', error);
+              strapi.log.error('Error stack:', error.stack);
             }
 
             // Answer callback
@@ -586,12 +604,12 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         const paymentService = strapi.service('api::payment.payment');
         
         // Get order with items BEFORE updating payment status (for stock restoration)
-        const orderBeforeUpdate = await strapi.entityService.findOne('api::order.order', parseInt(orderId), {
+        const orderBeforeUpdate = await strapi.entityService.findOne('api::order.order', orderIdNum, {
           populate: ['order_items.product', 'address'],
         });
         
         if (!orderBeforeUpdate) {
-          strapi.log.warn(`Order not found: ${orderId}`);
+          strapi.log.warn(`Order not found: ${orderIdNum}`);
           return;
         }
 
@@ -608,18 +626,36 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           if (updatedOrder) {
             // Send confirmation message to admin chat
             try {
+              strapi.log.info('📱 Sending Telegram confirmation message...');
               const { sendTelegramMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
               
               if (paymentStatus === 'success') {
-                const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formatPaymentSuccessMessage(updatedOrder, payment)}`;
-                await sendTelegramMessage(message);
+                const formattedMessage = formatPaymentSuccessMessage(updatedOrder, payment);
+                const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formattedMessage}`;
+                strapi.log.info('Sending success message to Telegram');
+                const result = await sendTelegramMessage(message);
+                if (result) {
+                  strapi.log.info('✅ Telegram confirmation message sent successfully');
+                } else {
+                  strapi.log.warn('⚠️ Telegram message sending returned false');
+                }
               } else {
-                const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formatPaymentFailureMessage(updatedOrder, payment)}`;
-                await sendTelegramMessage(message);
+                const formattedMessage = formatPaymentFailureMessage(updatedOrder, payment);
+                const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formattedMessage}`;
+                strapi.log.info('Sending failure message to Telegram');
+                const result = await sendTelegramMessage(message);
+                if (result) {
+                  strapi.log.info('✅ Telegram confirmation message sent successfully');
+                } else {
+                  strapi.log.warn('⚠️ Telegram message sending returned false');
+                }
               }
             } catch (error: any) {
-              strapi.log.warn('Failed to send confirmation Telegram notification:', error);
+              strapi.log.error('❌ Failed to send confirmation Telegram notification:', error);
+              strapi.log.error('Error stack:', error.stack);
             }
+          } else {
+            strapi.log.warn('Updated order not found, cannot send Telegram message');
           }
         } else {
           // For payments without hashId, update directly
@@ -662,18 +698,34 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
           // Send Telegram notification with full order info when marked as paid
           try {
-            const { sendTelegramMessage, formatOrderMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
+            strapi.log.info('📱 Sending Telegram confirmation message (no hashId)...');
+            const { sendTelegramMessage, formatPaymentSuccessMessage, formatPaymentFailureMessage } = await import('../../../utils/sendTelegramMessage');
             
             if (paymentStatus === 'success') {
               // Send confirmation message
-              const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formatPaymentSuccessMessage(orderWithItems, payment)}`;
-              await sendTelegramMessage(message);
+              const formattedMessage = formatPaymentSuccessMessage(orderWithItems, payment);
+              const message = `✅ <b>Платеж подтвержден через кнопку Telegram</b>\n\n${formattedMessage}`;
+              strapi.log.info('Sending success message to Telegram');
+              const result = await sendTelegramMessage(message);
+              if (result) {
+                strapi.log.info('✅ Telegram confirmation message sent successfully');
+              } else {
+                strapi.log.warn('⚠️ Telegram message sending returned false');
+              }
             } else {
-              const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formatPaymentFailureMessage(orderWithItems, payment)}`;
-              await sendTelegramMessage(message);
+              const formattedMessage = formatPaymentFailureMessage(orderWithItems, payment);
+              const message = `❌ <b>Платеж отклонен через кнопку Telegram</b>\n\n${formattedMessage}`;
+              strapi.log.info('Sending failure message to Telegram');
+              const result = await sendTelegramMessage(message);
+              if (result) {
+                strapi.log.info('✅ Telegram confirmation message sent successfully');
+              } else {
+                strapi.log.warn('⚠️ Telegram message sending returned false');
+              }
             }
           } catch (error: any) {
-            strapi.log.warn('Failed to send Telegram notification:', error);
+            strapi.log.error('❌ Failed to send Telegram notification:', error);
+            strapi.log.error('Error stack:', error.stack);
           }
         }
 

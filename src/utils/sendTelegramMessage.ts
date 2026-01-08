@@ -51,12 +51,22 @@ export async function sendTelegramMessage(
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error('Telegram API error:', errorData);
+      console.error('Response status:', response.status);
+      console.error('Response statusText:', response.statusText);
       return false;
     }
 
-    return true;
+    const result = (await response.json().catch(() => ({}))) as { ok?: boolean; description?: string };
+    if (result.ok) {
+      console.log('✅ Telegram message sent successfully');
+      return true;
+    } else {
+      console.error('Telegram API returned error:', result);
+      return false;
+    }
   } catch (error: any) {
     console.error('Failed to send Telegram message:', error.message);
+    console.error('Error stack:', error.stack);
     return false;
   }
 }
