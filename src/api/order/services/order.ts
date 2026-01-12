@@ -344,11 +344,11 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
           if (!existingUsageDocumentIds.includes(orderDocumentId)) {
             console.log(`   Связываю заказ ${orderDocumentId} с промокодом...`);
             
-            // In Strapi v5, for oneToMany relations without mappedBy (one-sided relation),
-            // Strapi uses a join table: promocodes_usages_links
+            // In Strapi v5, for oneToMany relations without mappedBy,
+            // Strapi uses a join table: promocodes_usages_lnk (not "links")
             // We need to insert directly into this join table using Knex
             const connection = strapi.db.connection;
-            const tableName = 'promocodes_usages_links';
+            const tableName = 'promocodes_usages_lnk';
             
             // Get numeric IDs for the join table
             const promocodeId = promocodeEntity.id;
@@ -361,9 +361,11 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
             
             if (!existing) {
               // Insert the relation into join table
+              // Table structure: id, promocode_id, order_id, order_ord
               await connection(tableName).insert({
                 promocode_id: promocodeId,
                 order_id: orderId,
+                order_ord: null, // Optional ordering field
               });
               
               console.log(`✅ Связь добавлена в join-таблицу ${tableName}`);
