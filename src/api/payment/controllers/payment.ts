@@ -94,7 +94,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         organization,
         UNP,
         paymentAccount,
-        bankAdress
+        bankAdress,
+        promocode
       } = ctx.request.body;
 
       console.log('\n🔍 PARSED REQUEST DATA:');
@@ -144,8 +145,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
 
       // Validate products structure
       for (const product of products) {
-        if (!product.productDocumentId || !product.quantity) {
-          return ctx.badRequest('Each product must have productDocumentId and quantity');
+        if (!product.productSlug || !product.quantity) {
+          return ctx.badRequest('Each product must have productSlug and quantity');
         }
         if (product.quantity <= 0) {
           return ctx.badRequest('Product quantity must be greater than 0');
@@ -179,7 +180,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         address: addressData,
         comment,
         skipTelegram: shouldProcessAlphaBank,
-        paymentMethod: paymentMethod // Pass payment method for Telegram message
+        paymentMethod: paymentMethod, // Pass payment method for Telegram message
+        promocode: promocode || undefined // Pass promocode if provided (will be ignored if invalid)
       });
 
       strapi.log.info(`Order created with ID: ${orderResult.order.id}, order number: ${orderResult.order.orderNumber}`);

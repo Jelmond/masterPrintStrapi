@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "promocodes",
+  "info": {
+    "singularName": "promocode",
+    "pluralName": "promocodes",
+    "displayName": "Promocode"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": [
+        "order",
+        "shipping",
+        "whole"
+      ]
+    },
+    "percentDiscount": {
+      "type": "integer"
+    },
+    "isActual": {
+      "type": "boolean"
+    },
+    "availableUsages": {
+      "type": "integer"
+    },
+    "usages": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::order.order"
+    }
+  }
+}

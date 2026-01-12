@@ -4,6 +4,8 @@ This guide provides complete documentation for integrating the payment system wi
 
 ## Table of Contents
 - [API Endpoint](#api-endpoint)
+- [Calculate Order Price](#calculate-order-price)
+- [Promocode System](#promocode-system)
 - [Authentication](#authentication)
 - [Request Structure](#request-structure)
 - [Response Structure](#response-structure)
@@ -22,6 +24,295 @@ This guide provides complete documentation for integrating the payment system wi
 **Endpoint:** `POST /payments/initiate`
 
 **Content-Type:** `application/json`
+
+---
+
+## Calculate Order Price
+
+Before creating an order, you can calculate the total price to display to users. This endpoint uses the same pricing logic as order creation but doesn't create an order.
+
+**Endpoint:** `POST /orders/calculate-price`
+
+**Content-Type:** `application/json`
+
+**Authentication:** Not required (public endpoint)
+
+### Request Structure
+
+```typescript
+{
+  products: Array<{
+    productSlug: string;  // Product slug (e.g., "my-product-name")
+    quantity: number;     // Quantity (must be > 0)
+  }>;
+  type?: 'shipping' | 'selfShipping';  // Optional, default: 'shipping'
+  promocode?: string;  // Optional promocode name
+}
+```
+
+### Response Structure
+
+```typescript
+{
+  success: true,
+  data: {
+    products: Array<{
+      slug: string;
+      title: string;
+      unitPrice: number;
+      quantity: number;
+      totalPrice: number;
+    }>;
+    subtotal: number;              // Sum of all products before discounts/shipping
+    shippingCost: number;          // 20 BYN for shipping, 0 for selfShipping
+    discount: {
+      baseDiscount: number;        // Discount based on subtotal tiers (0%, 5%, or 20%)
+      selfShippingDiscount: number; // Additional 3% discount for selfShipping
+      totalDiscount: number;       // Total discount applied
+      description: string;        // Description of discount tier
+    };
+    totalAmount: number;            // Final total after all calculations
+    shippingType: 'shipping' | 'selfShipping';
+  }
+}
+```
+
+### Example Request
+
+```javascript
+const response = await fetch('https://your-api.com/api/orders/calculate-price', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+    body: JSON.stringify({
+      products: [
+        { productSlug: 'my-product-slug', quantity: 2 },
+        { productSlug: 'another-product-slug', quantity: 1 }
+      ],
+      type: 'shipping',  // or 'selfShipping'
+      promocode: 'SUMMER2024'  // Optional promocode
+    })
+});
+
+const result = await response.json();
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "products": [
+      {
+        "slug": "my-product-slug",
+        "title": "Product Name",
+        "unitPrice": 50.00,
+        "quantity": 2,
+        "totalPrice": 100.00
+      },
+      {
+        "slug": "another-product-slug",
+        "title": "Another Product",
+        "unitPrice": 30.00,
+        "quantity": 1,
+        "totalPrice": 30.00
+      }
+    ],
+    "subtotal": 130.00,
+    "shippingCost": 20.00,
+    "discount": {
+      "baseDiscount": 0.00,
+      "selfShippingDiscount": 0.00,
+      "totalDiscount": 0.00,
+      "description": "0% (<700 BYN)"
+    },
+    "totalAmount": 150.00,
+    "shippingType": "shipping",
+    "promocode": null
+  }
+}
+```
+
+**Example Response with Promocode:**
+```json
+{
+  "success": true,
+  "data": {
+    "products": [...],
+    "subtotal": 130.00,
+    "shippingCost": 20.00,
+    "discount": {
+      "baseDiscount": 0.00,
+      "selfShippingDiscount": 0.00,
+      "totalDiscount": 0.00,
+      "description": "0% (<700 BYN)"
+    },
+    "promocode": {
+      "name": "SUMMER2024",
+      "type": "whole",
+      "percentDiscount": 10,
+      "discountAmount": 15.00
+    },
+    "totalAmount": 135.00,
+    "shippingType": "shipping"
+  }
+}
+```
+
+### Discount Tiers
+
+The discount is calculated based on the subtotal:
+
+| Subtotal | Discount | Description |
+|----------|----------|-------------|
+| < 700 BYN | 0% | No discount |
+| ≥ 700 BYN | 5% | 5% discount applied |
+| ≥ 1500 BYN | 20% | 20% discount applied |
+
+**Note:** For `selfShipping`, an additional 3% discount is applied on top of the base discount.
+
+### Use Cases
+
+1. **Cart Preview**: Calculate and display total price as user adds items to cart
+2. **Shipping Selection**: Show price difference when user switches between shipping and self-pickup
+3. **Price Validation**: Verify price before submitting order
+4. **Dynamic Updates**: Recalculate price when quantity changes
+
+### Error Responses
+
+```typescript
+// Missing products
+{
+  error: {
+    status: 400,
+    message: "Products array is required and cannot be empty"
+  }
+}
+
+// Invalid product slug
+{
+  error: {
+    status: 404,
+    message: "Product with slug \"invalid-slug\" not found"
+  }
+}
+
+// Product without price
+{
+  error: {
+    status: 400,
+    message: "Product \"my-product-slug\" has no price"
+  }
+}
+```
+
+---
+
+## Promocode System
+
+The system supports promotional codes that can provide discounts on orders. Promocodes can be validated before use and applied during order creation.
+
+### Validate Promocode
+
+**Endpoint:** `POST /promocodes/validate`
+
+**Content-Type:** `application/json`
+
+**Authentication:** Not required (public endpoint)
+
+#### Request Structure
+
+```typescript
+{
+  name: string;  // Promocode name (e.g., "SUMMER2024")
+}
+```
+
+#### Response Structure
+
+**Valid Promocode:**
+```typescript
+{
+  valid: true,
+  data: {
+    name: string;
+    type: 'order' | 'shipping' | 'whole';
+    percentDiscount: number;  // Percentage (e.g., 10 for 10%)
+    availableUsages: number;
+    currentUsages: number;
+    remainingUsages: number;
+  }
+}
+```
+
+**Invalid Promocode:**
+```typescript
+{
+  valid: false,
+  message: string;  // Error message explaining why promocode is invalid
+}
+```
+
+#### Example Request
+
+```javascript
+const response = await fetch('https://your-api.com/api/promocodes/validate', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    name: 'SUMMER2024'
+  })
+});
+
+const result = await response.json();
+
+if (result.valid) {
+  console.log('Promocode is valid!');
+  console.log(`Discount: ${result.data.percentDiscount}%`);
+  console.log(`Type: ${result.data.type}`);
+  console.log(`Remaining uses: ${result.data.remainingUsages}`);
+} else {
+  console.log('Promocode is invalid:', result.message);
+}
+```
+
+#### Promocode Types
+
+| Type | Description | Discount Applied To |
+|------|-------------|---------------------|
+| `order` | Discount on products | Subtotal (sum of all products, before shipping) |
+| `shipping` | Discount on delivery | Shipping cost only (20 BYN) |
+| `whole` | Discount on total | Total amount (after all calculations) |
+
+#### Validation Rules
+
+A promocode is valid if:
+- ✅ It exists in the database
+- ✅ It is published (`publishedAt` is not null)
+- ✅ `isActual` is `true`
+- ✅ Current usages < `availableUsages`
+
+#### Error Messages
+
+- `"Promocode not found"` - Promocode doesn't exist
+- `"Promocode is not active"` - `isActual` is `false`
+- `"Promocode has reached maximum usages"` - All available usages are exhausted
+
+### Using Promocodes in Orders
+
+Promocodes can be applied when:
+1. **Calculating order price** - See [Calculate Order Price](#calculate-order-price)
+2. **Creating an order** - See [Request Structure](#request-structure)
+
+**Important Notes:**
+- Invalid promocodes are **silently ignored** (no errors thrown)
+- Promocode validation happens automatically during order creation
+- If a promocode is invalid, the order will be created without the discount
+- Each promocode can only be used a limited number of times (`availableUsages`)
 
 ---
 
@@ -49,17 +340,18 @@ headers: {
 | `paymentMethod` | `string` | ✅ Yes | Payment method (see below for allowed values) |
 | `type` | `string` | ❌ No | Address type: `"shipping"` (adds 20 BYN) or `"selfShipping"` (3% discount). Default: `"shipping"` |
 | `comment` | `string` | ❌ No | Order comment/notes |
+| `promocode` | `string` | ❌ No | Optional promocode name. Invalid promocodes are silently ignored |
 
 ### Product Object Structure
 
 ```typescript
 {
-  productDocumentId: string;  // Product documentId from Strapi (e.g., "pqf3udh2v6cq4pqi83s5c4jq")
-  quantity: number;           // Quantity (must be > 0)
+  productSlug: string;  // Product slug from Strapi (e.g., "my-product-name")
+  quantity: number;    // Quantity (must be > 0)
 }
 ```
 
-**Important:** Use the product's `documentId` (string), not the numeric `id`. In Strapi v5, `documentId` is the primary identifier.
+**Important:** Use the product's `slug` (string), not the numeric `id` or `documentId`. The slug is a URL-friendly identifier that remains stable.
 
 ### Individual Customer Fields (`isIndividual: true`)
 
@@ -170,8 +462,8 @@ The final order price is calculated based on the shipping type:
 // Total: 120 BYN
 const orderData = {
   products: [
-    { productDocumentId: "pqf3udh2v6cq4pqi83s5c4jq", quantity: 2 },  // 50 BYN each = 100 BYN
-    { productDocumentId: "ug9h79nptlyat7t67syprzmp", quantity: 1 }   // Assume total is 100 BYN
+    { productSlug: "my-product-slug", quantity: 2 },  // 50 BYN each = 100 BYN
+    { productSlug: "another-product-slug", quantity: 1 }   // Assume total is 100 BYN
   ],
   isIndividual: true,
   fullName: "Иван Иванов",
@@ -234,7 +526,7 @@ if (result.success) {
 // Total: 97 BYN
 const orderData = {
   products: [
-    { productDocumentId: "abc123def456ghi789", quantity: 2 },  // 50 BYN each = 100 BYN
+    { productSlug: "my-product-slug", quantity: 2 },  // 50 BYN each = 100 BYN
   ],
   isIndividual: true,
   fullName: "Петр Петров",
@@ -291,7 +583,7 @@ if (result.success) {
 ```javascript
 const orderData = {
   products: [
-    { productDocumentId: "xyz789abc123def456", quantity: 3 }
+    { productSlug: "my-product-slug", quantity: 3 }
   ],
   isIndividual: true,
   fullName: "Петр Петров",
@@ -344,7 +636,7 @@ if (result.success) {
 ```javascript
 const orderData = {
   products: [
-    { productDocumentId: "org111aaa222bbb333", quantity: 10 }
+    { productSlug: "my-product-slug", quantity: 10 }
   ],
   isIndividual: false,
   organization: "ООО «Компания»",
@@ -402,7 +694,7 @@ if (result.success) {
 ```javascript
 const orderData = {
   products: [
-    { productDocumentId: "org222ccc333ddd444", quantity: 5 }
+    { productSlug: "my-product-slug", quantity: 5 }
   ],
   isIndividual: false,
   organization: "ИП Иванов",
@@ -441,6 +733,218 @@ if (result.success) {
   "orderId": 126,
   "orderNumber": 1702745123459
 }
+```
+
+---
+
+### Example 5: Calculate Order Price Before Checkout
+
+```javascript
+// Calculate price as user adds items to cart or changes shipping type
+const calculatePrice = async (cartItems, shippingType = 'shipping') => {
+  const response = await fetch('https://your-api.com/api/orders/calculate-price', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      products: cartItems.map(item => ({
+        productSlug: item.slug,
+        quantity: item.quantity
+      })),
+      type: shippingType
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to calculate price');
+  }
+
+  const result = await response.json();
+  return result.data;
+};
+
+// Usage in React component
+const [priceData, setPriceData] = useState(null);
+const [shippingType, setShippingType] = useState('shipping');
+
+useEffect(() => {
+  if (cartItems.length > 0) {
+    calculatePrice(cartItems, shippingType)
+      .then(data => setPriceData(data))
+      .catch(error => console.error('Price calculation error:', error));
+  }
+}, [cartItems, shippingType]);
+
+// Display price breakdown
+if (priceData) {
+  return (
+    <div className="price-summary">
+      <div>Subtotal: {priceData.subtotal} BYN</div>
+      {priceData.shippingCost > 0 && (
+        <div>Shipping: +{priceData.shippingCost} BYN</div>
+      )}
+      {priceData.discount.totalDiscount > 0 && (
+        <div>
+          Discount ({priceData.discount.description}): 
+          -{priceData.discount.totalDiscount} BYN
+        </div>
+      )}
+      <div className="total">
+        <strong>Total: {priceData.totalAmount} BYN</strong>
+      </div>
+    </div>
+  );
+}
+```
+
+**Expected Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "products": [
+      {
+        "slug": "product-1",
+        "title": "Product 1",
+        "unitPrice": 50.00,
+        "quantity": 2,
+        "totalPrice": 100.00
+      }
+    ],
+    "subtotal": 100.00,
+    "shippingCost": 20.00,
+    "discount": {
+      "baseDiscount": 0.00,
+      "selfShippingDiscount": 0.00,
+      "totalDiscount": 0.00,
+      "description": "0% (<700 BYN)"
+    },
+    "totalAmount": 120.00,
+    "shippingType": "shipping"
+  }
+}
+```
+
+---
+
+### Example 6: Using Promocode with Order
+
+```javascript
+// First, validate the promocode
+const validatePromocode = async (promocodeName) => {
+  const response = await fetch('https://your-api.com/api/promocodes/validate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name: promocodeName })
+  });
+
+  return await response.json();
+};
+
+// Validate before showing to user
+const promocodeResult = await validatePromocode('SUMMER2024');
+
+if (promocodeResult.valid) {
+  console.log(`Promocode valid! ${promocodeResult.data.percentDiscount}% discount`);
+  // Show discount info to user
+} else {
+  console.log('Promocode invalid:', promocodeResult.message);
+  // Show error to user
+}
+
+// Use promocode when creating order
+const orderData = {
+  products: [
+    { productSlug: 'my-product-slug', quantity: 2 }
+  ],
+  isIndividual: true,
+  fullName: 'Иван Иванов',
+  email: 'ivan@example.com',
+  phone: '+375291234567',
+  city: 'Минск',
+  address: 'ул. Ленина, д. 10, кв. 5',
+  paymentMethod: 'card',
+  type: 'shipping',
+  promocode: 'SUMMER2024'  // Add promocode here
+};
+
+const response = await fetch('https://your-api.com/api/payments/initiate', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(orderData)
+});
+
+const result = await response.json();
+// Order will be created with promocode discount applied (if valid)
+// If promocode is invalid, order will still be created without discount
+```
+
+### Example 7: Calculate Price with Promocode
+
+```javascript
+// Calculate price with promocode to show user the discount
+const calculatePriceWithPromocode = async (cartItems, shippingType, promocode) => {
+  const response = await fetch('https://your-api.com/api/orders/calculate-price', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      products: cartItems.map(item => ({
+        productSlug: item.slug,
+        quantity: item.quantity
+      })),
+      type: shippingType,
+      promocode: promocode  // Optional promocode
+    })
+  });
+
+  const result = await response.json();
+  
+  if (result.success) {
+    const { data } = result;
+    
+    // Display price breakdown
+    console.log('Subtotal:', data.subtotal, 'BYN');
+    if (data.shippingCost > 0) {
+      console.log('Shipping:', data.shippingCost, 'BYN');
+    }
+    if (data.discount.totalDiscount > 0) {
+      console.log('Base Discount:', data.discount.totalDiscount, 'BYN');
+    }
+    if (data.promocode) {
+      console.log(`Promocode ${data.promocode.name}: -${data.promocode.discountAmount} BYN`);
+    }
+    console.log('Total:', data.totalAmount, 'BYN');
+    
+    return data;
+  }
+};
+
+// Usage in React component
+const [priceData, setPriceData] = useState(null);
+const [promocode, setPromocode] = useState('');
+
+useEffect(() => {
+  if (cartItems.length > 0) {
+    calculatePriceWithPromocode(cartItems, shippingType, promocode)
+      .then(data => setPriceData(data))
+      .catch(error => console.error('Price calculation error:', error));
+  }
+}, [cartItems, shippingType, promocode]);
+
+// Display promocode discount if applied
+{priceData?.promocode && (
+  <div className="promocode-discount">
+    <span>Promocode {priceData.promocode.name}:</span>
+    <span>-{priceData.promocode.discountAmount} BYN</span>
+  </div>
+)}
 ```
 
 ---
@@ -573,7 +1077,7 @@ User Form → Frontend → Strapi API
 ```typescript
 // Product in cart
 interface Product {
-  productDocumentId: string;  // Strapi v5 documentId (e.g., "pqf3udh2v6cq4pqi83s5c4jq")
+  productSlug: string;  // Product slug (e.g., "my-product-name")
   quantity: number;
 }
 
@@ -584,6 +1088,7 @@ interface BasePaymentRequest {
   paymentMethod: string;
   type?: 'shipping' | 'selfShipping';
   comment?: string;
+  promocode?: string;  // Optional promocode name
 }
 
 // Individual customer request
@@ -614,9 +1119,50 @@ interface OrganizationPaymentRequest extends BasePaymentRequest {
 
 // Union type for all requests
 type PaymentRequest = IndividualPaymentRequest | OrganizationPaymentRequest;
+
+// Calculate price request
+interface CalculatePriceRequest {
+  products: Array<{
+    productSlug: string;
+    quantity: number;
+  }>;
+  type?: 'shipping' | 'selfShipping';
+  promocode?: string;  // Optional promocode name
+}
 ```
 
 ### Response Types
+
+```typescript
+// Calculate price response
+interface CalculatePriceResponse {
+  success: true;
+  data: {
+    products: Array<{
+      slug: string;
+      title: string;
+      unitPrice: number;
+      quantity: number;
+      totalPrice: number;
+    }>;
+    subtotal: number;
+    shippingCost: number;
+    discount: {
+      baseDiscount: number;
+      selfShippingDiscount: number;
+      totalDiscount: number;
+      description: string;
+    };
+    promocode: {
+      name: string;
+      type: 'order' | 'shipping' | 'whole';
+      percentDiscount: number;
+      discountAmount: number;
+    } | null;
+    totalAmount: number;
+    shippingType: 'shipping' | 'selfShipping';
+  };
+}
 
 ```typescript
 // Success response with payment link (card payment)
@@ -783,7 +1329,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ cartItems }) => {
       // Build request based on customer type
       const requestData: any = {
         products: cartItems.map(item => ({
-          productDocumentId: item.id,
+          productSlug: item.slug,
           quantity: item.quantity
         })),
         isIndividual,
@@ -1013,7 +1559,7 @@ test('Individual card payment creates order and returns payment link', async () 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      products: [{ productDocumentId: "test123abc456def789", quantity: 1 }],
+      products: [{ productSlug: "test-product-slug", quantity: 1 }],
       isIndividual: true,
       fullName: 'Test User',
       email: 'test@test.com',
@@ -1038,7 +1584,7 @@ test('Individual ERIP payment creates order without payment link', async () => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      products: [{ productDocumentId: "test123abc456def789", quantity: 1 }],
+      products: [{ productSlug: "test-product-slug", quantity: 1 }],
       isIndividual: true,
       fullName: 'Test User',
       email: 'test@test.com',
@@ -1093,7 +1639,7 @@ test('Missing required fields returns validation error', async () => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      products: [{ productDocumentId: "test123abc456def789", quantity: 1 }],
+      products: [{ productSlug: "test-product-slug", quantity: 1 }],
       isIndividual: true,
       paymentMethod: 'card'
       // Missing required fields
@@ -1243,9 +1789,10 @@ Is customer individual?
    - Ensure `isIndividual` is boolean, not string
 
 3. **"Product not found"**
-   - Verify `productDocumentId` exists in Strapi
+   - Verify `productSlug` exists in Strapi
    - Check product is published
    - Ensure product has a price set
+   - Make sure product has a slug (use `/api/products/generate-slugs` to generate slugs)
 
 4. **Payment callback not working**
    - Verify `RETURN_URL` and `FAILURE_URL` are accessible from internet
@@ -1261,5 +1808,17 @@ For questions or issues with integration, please contact the backend team or ref
 ---
 
 **Last Updated:** December 16, 2025
-**API Version:** 1.0
+**API Version:** 1.2
+
+### Changelog
+
+**v1.2 (December 16, 2025)**
+- Added promocode system with validation endpoint
+- Integrated promocodes into price calculation and order creation
+- Promocodes support three types: `order`, `shipping`, and `whole`
+- Invalid promocodes are silently ignored (no errors thrown)
+
+**v1.1 (December 16, 2025)**
+- Added `/orders/calculate-price` endpoint for price calculation before checkout
+- Updated all examples to use `productSlug` instead of `productDocumentId`
 

@@ -1,10 +1,10 @@
 export default {
     async getSimilarProducts(ctx) {
-        const { id } = ctx.params;
-        console.log('id', id)
+        const { slug } = ctx.params;
+        console.log('slug', slug)
 
-        // If id is 1000000, return random products
-        if (id === '1000000') {
+        // If slug is 'random', return random products
+        if (slug === 'random') {
             // First, let's check how many products we have in total
             const totalCount = await strapi.db.query('api::product.product').count();
             console.log('Total products in database:', totalCount);
@@ -15,30 +15,30 @@ export default {
             });
 
             console.log('Products found:', products.length);
-            console.log('Product IDs:', products.map(p => p.id));
+            console.log('Product slugs:', products.map(p => p.slug));
 
             // Shuffle and limit to 12 products
             const shuffled = products.sort(() => 0.5 - Math.random());
             const result = shuffled.slice(0, 12);
             
             console.log('Final result count:', result.length);
-            console.log('Final result IDs:', result.map(p => p.id));
+            console.log('Final result slugs:', result.map(p => p.slug));
 
             return { data: result };
         }
 
-        // Parse the id parameter which can be a single id or comma-separated ids
-        const productIds = id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        // Parse the slug parameter which can be a single slug or comma-separated slugs
+        const productSlugs = slug.split(',').map(s => s.trim()).filter(s => s.length > 0);
         
-        if (productIds.length === 0) {
-            return ctx.badRequest('No valid product IDs provided');
+        if (productSlugs.length === 0) {
+            return ctx.badRequest('No valid product slugs provided');
         }
 
         // Get the source products to find their categories and tags
         const sourceProducts = await strapi.db.query('api::product.product').findMany({
             where: {
-                id: {
-                    $in: productIds
+                slug: {
+                    $in: productSlugs
                 }
             },
             populate: ['categories', 'tags']
@@ -56,13 +56,16 @@ export default {
             product.tags?.map(tag => tag.id) || []
         );
 
+        // Get slugs of source products to exclude them
+        const sourceProductSlugs = sourceProducts.map(p => p.slug);
+
         // Find similar products that share categories or tags
         const similarProducts = await strapi.db.query('api::product.product').findMany({
             where: {
                 $and: [
                     {
-                        id: {
-                            $notIn: productIds // Exclude the source products
+                        slug: {
+                            $notIn: sourceProductSlugs // Exclude the source products
                         }
                     },
                     {
@@ -95,9 +98,9 @@ export default {
             }
         });
 
-        // Ensure uniqueness by ID
+        // Ensure uniqueness by slug
         const uniqueProducts = Array.from(
-            new Map(similarProducts.map(product => [product.id, product])).values()
+            new Map(similarProducts.map(product => [product.slug, product])).values()
         );
 
         // Shuffle and limit to 12 products

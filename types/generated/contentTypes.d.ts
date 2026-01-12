@@ -653,7 +653,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     singularName: 'product';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     articul: Schema.Attribute.String;
@@ -688,12 +688,46 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     publishedAt: Schema.Attribute.DateTime;
     quantityInPack: Schema.Attribute.Integer;
     size: Schema.Attribute.String;
+    slug: Schema.Attribute.String;
     stock: Schema.Attribute.Integer;
     tags: Schema.Attribute.Relation<'manyToMany', 'api::tag.tag'>;
     title: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiPromocodePromocode extends Struct.CollectionTypeSchema {
+  collectionName: 'promocodes';
+  info: {
+    displayName: 'Promocode';
+    pluralName: 'promocodes';
+    singularName: 'promocode';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    availableUsages: Schema.Attribute.Integer;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isActual: Schema.Attribute.Boolean;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::promocode.promocode'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String;
+    percentDiscount: Schema.Attribute.Integer;
+    publishedAt: Schema.Attribute.DateTime;
+    type: Schema.Attribute.Enumeration<['order', 'shipping', 'whole']>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    usages: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
   };
 }
 
@@ -1243,6 +1277,7 @@ declare module '@strapi/strapi' {
       'api::payment.payment': ApiPaymentPayment;
       'api::polish.polish': ApiPolishPolish;
       'api::product.product': ApiProductProduct;
+      'api::promocode.promocode': ApiPromocodePromocode;
       'api::tag.tag': ApiTagTag;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;

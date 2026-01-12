@@ -2,7 +2,7 @@ export default {
     routes: [
       {
         method: "GET",
-        path: "/getSimilarProducts/:id",
+        path: "/getSimilarProducts/:slug",
         handler: "get-similar-products.getSimilarProducts",
         // config: {
         //   policies: ["global::is-authenticated"],
@@ -22,6 +22,16 @@ export default {
         path: "/bestsellers",
         handler: "bestsellers.find",
         config: {
+          policies: [],
+          middlewares: [],
+        },
+      },
+      {
+        method: "POST",
+        path: "/generate-slugs",
+        handler: "generate-slugs.generateSlugs",
+        config: {
+          auth: false,
           policies: [],
           middlewares: [],
         },

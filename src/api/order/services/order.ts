@@ -7,7 +7,7 @@ import { calculateOrderTotal } from '../../../utils/getOrderPrice';
 import { sendTelegramMessage, formatOrderMessage } from '../../../utils/sendTelegramMessage';
 
 interface ProductInput {
-  productDocumentId: string; // Now using actual documentId (string) instead of numeric id
+  productSlug: string; // Using slug instead of documentId
   quantity: number;
 }
 
@@ -32,6 +32,7 @@ interface CreateOrderInput {
   comment?: string;
   skipTelegram?: boolean; // Skip Telegram notification (for AlphaBank - send only after payment)
   paymentMethod?: string; // Payment method for Telegram message
+  promocode?: string; // Optional promocode name
 }
 
 export default factories.createCoreService('api::order.order', ({ strapi }) => ({
@@ -62,22 +63,22 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       
       console.log(`\n🛍️  Product ${i + 1}/${products.length}:`);
       console.log(`   Input:`, JSON.stringify(productInput, null, 2));
-      console.log(`   📌 Looking up product by documentId: ${productInput.productDocumentId}`);
+      console.log(`   📌 Looking up product by slug: ${productInput.productSlug}`);
       
-      // Fetch product using documentId (Strapi v5 uses documentId as primary identifier)
-      const product = await strapi.documents('api::product.product').findOne({
-        documentId: productInput.productDocumentId,
+      // Fetch product using slug
+      const product = await strapi.db.query('api::product.product').findOne({
+        where: { slug: productInput.productSlug },
         populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
       });
 
       if (!product) {
-        console.error(`   ❌ Product with documentId ${productInput.productDocumentId} not found`);
-        throw new Error(`Product with documentId ${productInput.productDocumentId} not found`);
+        console.error(`   ❌ Product with slug ${productInput.productSlug} not found`);
+        throw new Error(`Product with slug ${productInput.productSlug} not found`);
       }
 
       if (!product.price) {
-        console.error(`   ❌ Product with documentId ${productInput.productDocumentId} has no price`);
-        throw new Error(`Product with documentId ${productInput.productDocumentId} has no price`);
+        console.error(`   ❌ Product with slug ${productInput.productSlug} has no price`);
+        throw new Error(`Product with slug ${productInput.productSlug} has no price`);
       }
 
       const unitPrice = parseFloat(product.price.toString());
@@ -87,6 +88,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       console.log(`   ✅ Found: ${product.title || 'Unnamed Product'}`);
       console.log(`   📌 Product ID: ${product.id}`);
       console.log(`   📄 Product DocumentID: ${product.documentId}`);
+      console.log(`   🔗 Product Slug: ${product.slug}`);
       console.log(`   💵 Unit Price: ${unitPrice} BYN`);
       console.log(`   🔢 Quantity: ${quantity}`);
       console.log(`   💰 Line Total: ${unitPrice} × ${quantity} = ${totalPrice.toFixed(2)} BYN`);
@@ -227,6 +229,65 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     }
     console.log('='.repeat(80));
 
+    // Step 3.5: Apply promocode if provided
+    let promocodeDiscount = 0;
+    let promocodeEntity = null;
+    let promocodeApplied = false;
+
+    if (input.promocode && typeof input.promocode === 'string' && input.promocode.trim()) {
+      try {
+        promocodeEntity = await strapi.db.query('api::promocode.promocode').findOne({
+          where: {
+            name: input.promocode.trim(),
+            publishedAt: { $notNull: true },
+          },
+          populate: ['usages'],
+        });
+
+        if (promocodeEntity && promocodeEntity.isActual) {
+          const currentUsages = promocodeEntity.usages?.length || 0;
+          if (currentUsages < promocodeEntity.availableUsages) {
+            promocodeApplied = true;
+            const percentDiscount = promocodeEntity.percentDiscount / 100;
+
+            console.log(`\n🎟️  PROMOCODE APPLIED: ${promocodeEntity.name}`);
+            console.log(`   Type: ${promocodeEntity.type}`);
+            console.log(`   Discount: ${promocodeEntity.percentDiscount}%`);
+
+            if (promocodeEntity.type === 'order') {
+              // Discount on subtotal (before shipping)
+              promocodeDiscount = subtotal * percentDiscount;
+              totalAmount = totalAmount - promocodeDiscount;
+              console.log(`   Discount Amount: -${promocodeDiscount.toFixed(2)} BYN (on subtotal)`);
+            } else if (promocodeEntity.type === 'shipping') {
+              // Discount on shipping cost
+              if (shippingType === 'shipping' && shippingCost > 0) {
+                promocodeDiscount = shippingCost * percentDiscount;
+                totalAmount = totalAmount - promocodeDiscount;
+                console.log(`   Discount Amount: -${promocodeDiscount.toFixed(2)} BYN (on shipping)`);
+              }
+            } else if (promocodeEntity.type === 'whole') {
+              // Discount on total amount (after all calculations)
+              promocodeDiscount = totalAmount * percentDiscount;
+              totalAmount = totalAmount - promocodeDiscount;
+              console.log(`   Discount Amount: -${promocodeDiscount.toFixed(2)} BYN (on total)`);
+            }
+
+            console.log(`   New Total: ${totalAmount.toFixed(2)} BYN`);
+            console.log('='.repeat(80));
+          } else {
+            console.log(`\n⚠️  Promocode ${input.promocode} has reached maximum usages`);
+          }
+        } else {
+          console.log(`\n⚠️  Promocode ${input.promocode} is not valid or not active (ignored)`);
+        }
+      } catch (promocodeError) {
+        // Silently ignore promocode errors - don't break order creation
+        console.log(`\n⚠️  Promocode validation error (ignored):`, promocodeError);
+        strapi.log.warn('Promocode validation error (ignored):', promocodeError);
+      }
+    }
+
     // Step 4: Generate order number (using base36 encoding for shorter number)
     // Convert timestamp to base36 for a shorter alphanumeric order number
     const timestamp = Math.floor(Date.now() / 1000);
@@ -243,18 +304,41 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     console.log('-'.repeat(80));
 
     // Step 5: Create order
+    const orderData: any = {
+      orderNumber,
+      orderStatus: 'pending',
+      orderDate: new Date(),
+      subtotal,
+      totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
+      address: address.documentId, // Use documentId for Strapi v5 relations
+      hashId: null, // Will be set after payment creation
+      comment: comment || null,
+    };
+
     const order = await strapi.entityService.create('api::order.order', {
-      data: {
-        orderNumber,
-        orderStatus: 'pending',
-        orderDate: new Date(),
-        subtotal,
-        totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
-        address: address.documentId, // Use documentId for Strapi v5 relations
-        hashId: null, // Will be set after payment creation
-        comment: comment || null,
-      },
+      data: orderData,
     });
+
+    // Step 5.5: Link promocode to order if applied
+    if (promocodeApplied && promocodeEntity) {
+      try {
+        // Link order to promocode using db.query
+        const orderDocumentId = order.documentId || order.id;
+        await strapi.db.query('api::promocode.promocode').update({
+          where: { id: promocodeEntity.id },
+          data: {
+            usages: {
+              connect: [{ documentId: orderDocumentId }],
+            },
+          },
+        });
+        console.log(`✅ Promocode ${promocodeEntity.name} linked to order ${order.id}`);
+      } catch (promocodeLinkError) {
+        // Don't fail order creation if promocode linking fails
+        console.log(`⚠️  Failed to link promocode to order (non-critical):`, promocodeLinkError);
+        strapi.log.warn('Failed to link promocode to order:', promocodeLinkError);
+      }
+    }
 
     console.log(`✅ Order created with ID: ${order.id}`);
     console.log(`   Order ID: ${order.id}`);
