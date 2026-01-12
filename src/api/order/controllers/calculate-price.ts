@@ -141,7 +141,7 @@ export default {
           }
         } catch (promocodeError) {
           // Silently ignore promocode errors - don't break the price calculation
-          strapi.log.warn('Promocode validation error (ignored):', promocodeError);
+          strapi.log.warn('Ошибка валидации промокода (игнорируется):', promocodeError);
         }
       }
 

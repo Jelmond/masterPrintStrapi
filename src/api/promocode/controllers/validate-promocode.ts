@@ -8,7 +8,7 @@ export default {
       const { name } = ctx.request.body;
 
       if (!name || typeof name !== 'string') {
-        return ctx.badRequest('Promocode name is required');
+        return ctx.badRequest('Название промокода обязательно');
       }
 
       // Find promocode by name
@@ -23,7 +23,7 @@ export default {
       if (!promocode) {
         return ctx.send({
           valid: false,
-          message: 'Promocode not found',
+          message: 'Промокод не найден',
         });
       }
 
@@ -31,7 +31,7 @@ export default {
       if (!promocode.isActual) {
         return ctx.send({
           valid: false,
-          message: 'Promocode is not active',
+          message: 'Промокод неактивен',
         });
       }
 
@@ -40,7 +40,7 @@ export default {
       if (currentUsages >= promocode.availableUsages) {
         return ctx.send({
           valid: false,
-          message: 'Promocode has reached maximum usages',
+          message: 'Промокод исчерпал лимит использований',
         });
       }
 
@@ -57,8 +57,8 @@ export default {
         },
       });
     } catch (err) {
-      strapi.log.error('Validate promocode error:', err);
-      return ctx.internalServerError('An error occurred while validating promocode');
+      strapi.log.error('Ошибка валидации промокода:', err);
+      return ctx.internalServerError('Произошла ошибка при проверке промокода');
     }
   },
 };

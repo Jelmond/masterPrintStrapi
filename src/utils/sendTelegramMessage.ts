@@ -93,7 +93,8 @@ export function formatOrderMessage(
   orderItems: any[] = [], 
   shippingCost: number = 0, 
   discount: number = 0,
-  paymentMethod?: string
+  paymentMethod?: string,
+  promocode?: { name: string; type: string; percentDiscount: number; discountAmount: number } | null
 ): string {
   // Calculate discount percentage if discount exists
   const discountPercentage = order.subtotal > 0 && discount > 0 
@@ -127,7 +128,14 @@ export function formatOrderMessage(
     pricingDetails += `\n<b>Доставка:</b> +${parseFloat(shippingCost.toString()).toFixed(2)} BYN`;
   }
   
-  if (discount > 0) {
+  // Calculate base discount (without promocode)
+  let baseDiscount = discount;
+  if (promocode && promocode.discountAmount > 0) {
+    // Subtract promocode discount from total discount to get base discount
+    baseDiscount = discount - promocode.discountAmount;
+  }
+
+  if (baseDiscount > 0) {
     // Determine discount description based on subtotal and shipping type
     const subtotalNum = parseFloat(order.subtotal.toString());
     let discountDesc = '';
@@ -141,21 +149,32 @@ export function formatOrderMessage(
     }
     
     // Check if it's self-pickup (has discount but no shipping cost)
-    const isSelfPickup = shippingCost === 0 && discount > 0;
+    const isSelfPickup = shippingCost === 0 && baseDiscount > 0;
     
     if (isSelfPickup && subtotalNum >= 700) {
       // Show both base discount and self-pickup discount separately
-      const baseDiscount = subtotalNum >= 1500 ? subtotalNum * 0.20 : subtotalNum * 0.05;
+      const baseDiscountAmount = subtotalNum >= 1500 ? subtotalNum * 0.20 : subtotalNum * 0.05;
       const selfPickupDiscount = subtotalNum * 0.03;
-      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
+      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(baseDiscountAmount.toString()).toFixed(2)} BYN`;
       pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${parseFloat(selfPickupDiscount.toString()).toFixed(2)} BYN`;
     } else if (isSelfPickup) {
       // Only self-pickup discount (subtotal < 700)
-      pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${parseFloat(discount.toString()).toFixed(2)} BYN`;
+      pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
     } else {
       // Only base discount (delivery)
-      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(discount.toString()).toFixed(2)} BYN`;
+      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
     }
+  }
+
+  // Add promocode discount if applied
+  if (promocode && promocode.discountAmount > 0) {
+    const promocodeTypeNames: { [key: string]: string } = {
+      'order': 'на сумму товаров',
+      'shipping': 'на доставку',
+      'whole': 'на итоговую сумму'
+    };
+    const typeName = promocodeTypeNames[promocode.type] || promocode.type;
+    pricingDetails += `\n<b>Промокод "${promocode.name}" (${promocode.percentDiscount}% ${typeName}):</b> -${parseFloat(promocode.discountAmount.toString()).toFixed(2)} BYN`;
   }
   
   pricingDetails += `\n<b>Итого:</b> ${parseFloat(order.totalAmount.toString()).toFixed(2)} BYN`;

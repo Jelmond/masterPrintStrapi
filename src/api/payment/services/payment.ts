@@ -299,12 +299,56 @@ export default factories.createCoreService('api::payment.payment', ({ strapi }) 
                 ? (orderWithItems.subtotal - (orderWithItems.totalAmount - (shippingCost > 0 ? shippingCost : 0)))
                 : 0;
               
+              // Find promocode used in this order
+              let promocodeInfo = null;
+              try {
+                const promocodes = await strapi.db.query('api::promocode.promocode').findMany({
+                  where: {
+                    usages: {
+                      id: orderWithItems.id,
+                    },
+                  },
+                });
+                
+                if (promocodes && promocodes.length > 0) {
+                  const promocode = promocodes[0];
+                  const subtotalNum = parseFloat(orderWithItems.subtotal.toString());
+                  const percentDiscount = promocode.percentDiscount / 100;
+                  
+                  // Calculate promocode discount amount based on type
+                  let promocodeDiscountAmount = 0;
+                  if (promocode.type === 'order') {
+                    // Discount on subtotal
+                    promocodeDiscountAmount = subtotalNum * percentDiscount;
+                  } else if (promocode.type === 'shipping') {
+                    // Discount on shipping cost
+                    promocodeDiscountAmount = shippingCost * percentDiscount;
+                  } else if (promocode.type === 'whole') {
+                    // Discount on total (calculate what total was before promocode)
+                    // Total before promocode = subtotal - baseDiscount + shippingCost
+                    const baseTotal = subtotalNum - discount + shippingCost;
+                    promocodeDiscountAmount = baseTotal * percentDiscount;
+                  }
+                  
+                  promocodeInfo = {
+                    name: promocode.name,
+                    type: promocode.type,
+                    percentDiscount: promocode.percentDiscount,
+                    discountAmount: parseFloat(promocodeDiscountAmount.toFixed(2)),
+                  };
+                }
+              } catch (promocodeError) {
+                // Silently ignore - promocode info is optional
+                strapi.log.warn('Не удалось получить информацию о промокоде для Telegram сообщения:', promocodeError);
+              }
+              
               const message = formatOrderMessage(
                 orderWithItems, 
                 orderItems, 
                 shippingCost,
                 discount,
-                updatedPayment.paymentMethod // Pass payment method
+                updatedPayment.paymentMethod, // Pass payment method
+                promocodeInfo // Pass promocode info
               );
               
               // Add payment success info

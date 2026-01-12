@@ -276,15 +276,15 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
             console.log(`   New Total: ${totalAmount.toFixed(2)} BYN`);
             console.log('='.repeat(80));
           } else {
-            console.log(`\n⚠️  Promocode ${input.promocode} has reached maximum usages`);
+            console.log(`\n⚠️  Промокод ${input.promocode} исчерпал лимит использований`);
           }
         } else {
-          console.log(`\n⚠️  Promocode ${input.promocode} is not valid or not active (ignored)`);
+          console.log(`\n⚠️  Промокод ${input.promocode} недействителен или неактивен (игнорируется)`);
         }
       } catch (promocodeError) {
         // Silently ignore promocode errors - don't break order creation
-        console.log(`\n⚠️  Promocode validation error (ignored):`, promocodeError);
-        strapi.log.warn('Promocode validation error (ignored):', promocodeError);
+        console.log(`\n⚠️  Ошибка валидации промокода (игнорируется):`, promocodeError);
+        strapi.log.warn('Ошибка валидации промокода (игнорируется):', promocodeError);
       }
     }
 
@@ -322,21 +322,44 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     // Step 5.5: Link promocode to order if applied
     if (promocodeApplied && promocodeEntity) {
       try {
-        // Link order to promocode using db.query
-        const orderDocumentId = order.documentId || order.id;
-        await strapi.db.query('api::promocode.promocode').update({
-          where: { id: promocodeEntity.id },
-          data: {
-            usages: {
-              connect: [{ documentId: orderDocumentId }],
-            },
-          },
+        const orderId = order.id;
+        const promocodeId = promocodeEntity.id;
+        
+        // Reload promocode with usages to check current state
+        const currentPromocode = await strapi.db.query('api::promocode.promocode').findOne({
+          where: { id: promocodeId },
+          populate: ['usages'],
         });
-        console.log(`✅ Promocode ${promocodeEntity.name} linked to order ${order.id}`);
+        
+        if (currentPromocode) {
+          // Check if order is already linked
+          const existingUsageIds = (currentPromocode.usages || []).map((u: any) => u.id).filter(Boolean);
+          
+          if (!existingUsageIds.includes(orderId)) {
+            // In Strapi v5, oneToMany relations are stored in a join table
+            // Table name format: {source_table}_{field_name}_links
+            // For promocode.usages (oneToMany -> orders), table is: promocodes_usages_links
+            // Columns: promocode_id, order_id, promocode_order, order_order
+            
+            const connection = strapi.db.connection;
+            const tableName = 'promocodes_usages_links';
+            
+            // Insert the relation directly into the join table
+            await connection(tableName).insert({
+              promocode_id: promocodeId,
+              order_id: orderId,
+            });
+            
+            console.log(`✅ Промокод ${promocodeEntity.name} привязан к заказу ${order.id}`);
+            console.log(`   Текущее количество использований: ${existingUsageIds.length + 1}/${promocodeEntity.availableUsages}`);
+          } else {
+            console.log(`⚠️  Промокод ${promocodeEntity.name} уже связан с заказом ${order.id}`);
+          }
+        }
       } catch (promocodeLinkError) {
         // Don't fail order creation if promocode linking fails
-        console.log(`⚠️  Failed to link promocode to order (non-critical):`, promocodeLinkError);
-        strapi.log.warn('Failed to link promocode to order:', promocodeLinkError);
+        console.log(`⚠️  Не удалось привязать промокод к заказу (некритично):`, promocodeLinkError);
+        strapi.log.warn('Не удалось привязать промокод к заказу:', promocodeLinkError);
       }
     }
 
@@ -395,7 +418,16 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
         const orderWithItems = await strapi.entityService.findOne('api::order.order', order.id, {
           populate: ['order_items.product', 'address'],
         });
-        const message = formatOrderMessage(orderWithItems, createdOrderItems, shippingCost, discount, input.paymentMethod);
+        
+        // Prepare promocode info for Telegram message
+        const promocodeInfo = promocodeApplied && promocodeEntity ? {
+          name: promocodeEntity.name,
+          type: promocodeEntity.type,
+          percentDiscount: promocodeEntity.percentDiscount,
+          discountAmount: promocodeDiscount,
+        } : null;
+        
+        const message = formatOrderMessage(orderWithItems, createdOrderItems, shippingCost, discount, input.paymentMethod, promocodeInfo);
         // Add inline keyboard buttons for payment status
         const replyMarkup = {
           inline_keyboard: [
