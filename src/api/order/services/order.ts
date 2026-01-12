@@ -322,44 +322,90 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     // Step 5.5: Link promocode to order if applied
     if (promocodeApplied && promocodeEntity) {
       try {
-        const orderId = order.id;
-        const promocodeId = promocodeEntity.id;
+        const orderDocumentId = order.documentId || order.id;
+        const promocodeDocumentId = promocodeEntity.documentId || promocodeEntity.id;
         
-        // Reload promocode with usages to check current state
-        const currentPromocode = await strapi.db.query('api::promocode.promocode').findOne({
-          where: { id: promocodeId },
+        console.log(`🔗 Linking promocode ${promocodeEntity.name} (${promocodeDocumentId}) to order ${order.id} (${orderDocumentId})`);
+        
+        // Get current promocode with usages using documents API
+        const currentPromocode = await strapi.documents('api::promocode.promocode').findOne({
+          documentId: promocodeDocumentId,
           populate: ['usages'],
         });
         
         if (currentPromocode) {
           // Check if order is already linked
-          const existingUsageIds = (currentPromocode.usages || []).map((u: any) => u.id).filter(Boolean);
+          const existingUsages = currentPromocode.usages || [];
+          const existingUsageDocumentIds = existingUsages.map((u: any) => u.documentId || u.id).filter(Boolean);
           
-          if (!existingUsageIds.includes(orderId)) {
-            // In Strapi v5, oneToMany relations are stored in a join table
-            // Table name format: {source_table}_{field_name}_links
-            // For promocode.usages (oneToMany -> orders), table is: promocodes_usages_links
-            // Columns: promocode_id, order_id, promocode_order, order_order
+          console.log(`   Текущие использования промокода: ${existingUsageDocumentIds.length}`);
+          console.log(`   Существующие documentIds: ${JSON.stringify(existingUsageDocumentIds)}`);
+          
+          if (!existingUsageDocumentIds.includes(orderDocumentId)) {
+            console.log(`   Связываю заказ ${orderDocumentId} с промокодом...`);
             
+            // In Strapi v5, for oneToMany relations without mappedBy (one-sided relation),
+            // Strapi uses a join table: promocodes_usages_links
+            // We need to insert directly into this join table using Knex
             const connection = strapi.db.connection;
             const tableName = 'promocodes_usages_links';
             
-            // Insert the relation directly into the join table
-            await connection(tableName).insert({
-              promocode_id: promocodeId,
-              order_id: orderId,
-            });
+            // Get numeric IDs for the join table
+            const promocodeId = promocodeEntity.id;
+            const orderId = order.id;
+            
+            // Check if relation already exists
+            const existing = await connection(tableName)
+              .where({ promocode_id: promocodeId, order_id: orderId })
+              .first();
+            
+            if (!existing) {
+              // Insert the relation into join table
+              await connection(tableName).insert({
+                promocode_id: promocodeId,
+                order_id: orderId,
+              });
+              
+              console.log(`✅ Связь добавлена в join-таблицу ${tableName}`);
+              
+              // Decrease availableUsages by 1
+              const currentAvailableUsages = promocodeEntity.availableUsages || 0;
+              const newAvailableUsages = Math.max(0, currentAvailableUsages - 1);
+              
+              // Update promocode's availableUsages using entityService
+              await strapi.entityService.update('api::promocode.promocode', promocodeId, {
+                data: {
+                  availableUsages: newAvailableUsages,
+                },
+              });
+              
+              console.log(`✅ availableUsages обновлено: ${currentAvailableUsages} → ${newAvailableUsages}`);
+            } else {
+              console.log(`⚠️  Связь уже существует в join-таблице`);
+            }
             
             console.log(`✅ Промокод ${promocodeEntity.name} привязан к заказу ${order.id}`);
-            console.log(`   Текущее количество использований: ${existingUsageIds.length + 1}/${promocodeEntity.availableUsages}`);
+            
+            // Get updated promocode to show current usage count
+            const updatedPromocode = await strapi.documents('api::promocode.promocode').findOne({
+              documentId: promocodeDocumentId,
+              populate: ['usages'],
+            });
+            const currentUsages = updatedPromocode?.usages?.length || 0;
+            const updatedAvailableUsages = updatedPromocode?.availableUsages || 0;
+            console.log(`   Текущее количество использований: ${currentUsages}/${updatedAvailableUsages}`);
+            console.log(`   Обновленные documentIds: ${JSON.stringify((updatedPromocode?.usages || []).map((u: any) => u.documentId || u.id))}`);
           } else {
             console.log(`⚠️  Промокод ${promocodeEntity.name} уже связан с заказом ${order.id}`);
           }
+        } else {
+          console.log(`⚠️  Промокод не найден по documentId: ${promocodeDocumentId}`);
         }
       } catch (promocodeLinkError) {
         // Don't fail order creation if promocode linking fails
         console.log(`⚠️  Не удалось привязать промокод к заказу (некритично):`, promocodeLinkError);
         strapi.log.warn('Не удалось привязать промокод к заказу:', promocodeLinkError);
+        strapi.log.error('Детали ошибки:', promocodeLinkError);
       }
     }
 
