@@ -90,6 +90,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         phone,
         city,
         address,
+        legalAddress,
+        deliveryAddress,
         paymentMethod,
         organization,
         UNP,
@@ -125,9 +127,9 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         if (!['ERIP', 'card', 'pickupPayment'].includes(paymentMethod)) {
           return ctx.badRequest('For individuals, paymentMethod must be ERIP, card, or pickupPayment');
         }
-        // Validate individual fields
-        if (!fullName || !email || !phone || !city || !address) {
-          return ctx.badRequest('For individuals, fullName, email, phone, city, and address are required');
+        // Validate individual fields - accept either address (deprecated) or deliveryAddress
+        if (!fullName || !email || !phone || !city || (!address && !deliveryAddress)) {
+          return ctx.badRequest('For individuals, fullName, email, phone, city, and address (or deliveryAddress) are required');
         }
         // pickupPayment is only valid for selfShipping
         if (paymentMethod === 'pickupPayment' && type !== 'selfShipping') {
@@ -137,9 +139,9 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         if (!['ERIP', 'paymentAccount'].includes(paymentMethod)) {
           return ctx.badRequest('For organizations, paymentMethod must be ERIP or paymentAccount');
         }
-        // Validate organization fields
-        if (!organization || !fullName || !UNP || !paymentAccount || !bankAdress || !email || !phone || !city || !address) {
-          return ctx.badRequest('For organizations, organization, fullName, UNP, paymentAccount, bankAdress, email, phone, city, and address are required');
+        // Validate organization fields - require both legalAddress and deliveryAddress
+        if (!organization || !fullName || !UNP || !paymentAccount || !bankAdress || !email || !phone || !city || !legalAddress || !deliveryAddress) {
+          return ctx.badRequest('For organizations, organization, fullName, UNP, paymentAccount, bankAdress, email, phone, city, legalAddress, and deliveryAddress are required');
         }
       }
 
@@ -161,12 +163,14 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         email,
         phone,
         city,
-        address,
+        address: address || null, // Deprecated - for backward compatibility
+        deliveryAddress: deliveryAddress || address || null, // Use deliveryAddress or fall back to address
         ...(isIndividual ? {} : {
           organization,
           UNP,
           paymentAccount,
           bankAdress,
+          legalAddress,
         }),
       };
 

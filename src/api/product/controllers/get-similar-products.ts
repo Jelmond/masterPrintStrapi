@@ -11,7 +11,24 @@ export default {
 
             const products = await strapi.db.query('api::product.product').findMany({
                 where: { publishedAt: { $notNull: true } },
-                populate: { images: true, categories: true, tags: true, batch: true, designers: true, polishes: true }
+                populate: {
+                    images: true,
+                    categories: {
+                        where: { publishedAt: { $notNull: true } }
+                    },
+                    tags: {
+                        where: { publishedAt: { $notNull: true } }
+                    },
+                    batch: {
+                        where: { publishedAt: { $notNull: true } }
+                    },
+                    designers: {
+                        where: { publishedAt: { $notNull: true } }
+                    },
+                    polishes: {
+                        where: { publishedAt: { $notNull: true } }
+                    }
+                }
             });
 
             console.log('Products found:', products.length);
@@ -34,14 +51,21 @@ export default {
             return ctx.badRequest('No valid product slugs provided');
         }
 
-        // Get the source products to find their categories and tags
+        // Get the source products to find their categories and tags (only published)
         const sourceProducts = await strapi.db.query('api::product.product').findMany({
             where: {
                 slug: {
                     $in: productSlugs
                 }
             },
-            populate: ['categories', 'tags']
+            populate: {
+                categories: {
+                    where: { publishedAt: { $notNull: true } }
+                },
+                tags: {
+                    where: { publishedAt: { $notNull: true } }
+                }
+            }
         });
 
         if (sourceProducts.length === 0) {
@@ -90,11 +114,21 @@ export default {
             },
             populate: {
                 images: true,
-                categories: true,
-                tags: true,
-                batch: true,
-                designers: true,
-                polishes: true
+                categories: {
+                    where: { publishedAt: { $notNull: true } }
+                },
+                tags: {
+                    where: { publishedAt: { $notNull: true } }
+                },
+                batch: {
+                    where: { publishedAt: { $notNull: true } }
+                },
+                designers: {
+                    where: { publishedAt: { $notNull: true } }
+                },
+                polishes: {
+                    where: { publishedAt: { $notNull: true } }
+                }
             }
         });
 

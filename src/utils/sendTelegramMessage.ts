@@ -122,10 +122,15 @@ export function formatOrderMessage(
 
   // Build pricing breakdown - format all values to 2 decimal places to avoid floating point issues
   const formattedSubtotal = parseFloat(order.subtotal.toString()).toFixed(2);
+  const subtotalNum = parseFloat(order.subtotal.toString());
   let pricingDetails = `<b>Сумма товаров:</b> ${formattedSubtotal} BYN`;
   
+  // Show shipping cost or free shipping message
   if (shippingCost > 0) {
     pricingDetails += `\n<b>Доставка:</b> +${parseFloat(shippingCost.toString()).toFixed(2)} BYN`;
+  } else if (subtotalNum >= 400 && shippingCost === 0) {
+    // Free shipping for orders >= 400 BYN (only for delivery, not self-pickup)
+    pricingDetails += `\n<b>Доставка:</b> Бесплатно (≥400 BYN)`;
   }
   
   // Calculate base discount (without promocode)
@@ -136,33 +141,28 @@ export function formatOrderMessage(
   }
 
   if (baseDiscount > 0) {
-    // Determine discount description based on subtotal and shipping type
-    const subtotalNum = parseFloat(order.subtotal.toString());
-    let discountDesc = '';
-    
-    if (subtotalNum >= 1500) {
-      discountDesc = '20% (≥1500 BYN)';
-    } else if (subtotalNum >= 700) {
-      discountDesc = '5% (≥700 BYN)';
-    } else {
-      discountDesc = '0% (<700 BYN)';
-    }
-    
-    // Check if it's self-pickup (has discount but no shipping cost)
-    const isSelfPickup = shippingCost === 0 && baseDiscount > 0;
+    // Check if it's self-pickup (no shipping cost from the start, not because of free shipping)
+    const isSelfPickup = shippingCost === 0 && subtotalNum < 400;
     
     if (isSelfPickup && subtotalNum >= 700) {
       // Show both base discount and self-pickup discount separately
       const baseDiscountAmount = subtotalNum >= 1500 ? subtotalNum * 0.20 : subtotalNum * 0.05;
       const selfPickupDiscount = subtotalNum * 0.03;
-      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(baseDiscountAmount.toString()).toFixed(2)} BYN`;
-      pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${parseFloat(selfPickupDiscount.toString()).toFixed(2)} BYN`;
+      
+      // Format base discount description
+      const baseDiscountPercent = subtotalNum >= 1500 ? '20%' : '5%';
+      const baseDiscountThreshold = subtotalNum >= 1500 ? '1500' : '700';
+      
+      pricingDetails += `\n<b>Скидка ${baseDiscountPercent} (≥${baseDiscountThreshold} BYN):</b> -${parseFloat(baseDiscountAmount.toString()).toFixed(2)} BYN`;
+      pricingDetails += `\n<b>Скидка за самовывоз 3%:</b> -${parseFloat(selfPickupDiscount.toString()).toFixed(2)} BYN`;
     } else if (isSelfPickup) {
       // Only self-pickup discount (subtotal < 700)
-      pricingDetails += `\n<b>Скидка (самовывоз 3%):</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
+      pricingDetails += `\n<b>Скидка за самовывоз 3%:</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
     } else {
       // Only base discount (delivery)
-      pricingDetails += `\n<b>Скидка (${discountDesc}):</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
+      const baseDiscountPercent = subtotalNum >= 1500 ? '20%' : (subtotalNum >= 700 ? '5%' : '0%');
+      const baseDiscountThreshold = subtotalNum >= 1500 ? '1500' : '700';
+      pricingDetails += `\n<b>Скидка ${baseDiscountPercent} (≥${baseDiscountThreshold} BYN):</b> -${parseFloat(baseDiscount.toString()).toFixed(2)} BYN`;
     }
   }
 
@@ -199,8 +199,25 @@ export function formatOrderMessage(
     addressInfo += `<b>Город:</b> ${address.city}\n`;
   }
   
-  if (address.address) {
-    addressInfo += `<b>Адрес:</b> ${address.address}\n`;
+  // Address display depends on customer type
+  if (address.isIndividual) {
+    // For individuals: show deliveryAddress (or deprecated address field)
+    const displayAddress = address.deliveryAddress || address.address;
+    if (displayAddress) {
+      addressInfo += `<b>Адрес доставки:</b> ${displayAddress}\n`;
+    }
+  } else {
+    // For organizations: show both legal and delivery addresses
+    if (address.legalAddress) {
+      addressInfo += `<b>Юридический адрес:</b> ${address.legalAddress}\n`;
+    }
+    if (address.deliveryAddress) {
+      addressInfo += `<b>Адрес доставки:</b> ${address.deliveryAddress}\n`;
+    }
+    // Fallback to deprecated address field if new fields are not set
+    if (!address.legalAddress && !address.deliveryAddress && address.address) {
+      addressInfo += `<b>Адрес:</b> ${address.address}\n`;
+    }
   }
   
   if (address.postalCode) {

@@ -4,10 +4,11 @@
   "info": {
     "singularName": "designer",
     "pluralName": "designers",
-    "displayName": "Designer"
+    "displayName": "Designer",
+    "description": ""
   },
   "options": {
-    "draftAndPublish": true
+    "draftAndPublish": false
   },
   "attributes": {
     "name": {

@@ -64,13 +64,20 @@ Before creating an order, you can calculate the total price to display to users.
       totalPrice: number;
     }>;
     subtotal: number;              // Sum of all products before discounts/shipping
-    shippingCost: number;          // 20 BYN for shipping, 0 for selfShipping
+    shippingCost: number;          // FREE (0 BYN) if subtotal >= 400 BYN, otherwise 20 BYN for shipping, 0 for selfShipping
+    freeShipping: boolean;         // true if shipping is free (subtotal >= 400 BYN and type is 'shipping')
     discount: {
       baseDiscount: number;        // Discount based on subtotal tiers (0%, 5%, or 20%)
       selfShippingDiscount: number; // Additional 3% discount for selfShipping
       totalDiscount: number;       // Total discount applied
       description: string;        // Description of discount tier
     };
+    promocode: {                   // Promocode details if applied, null otherwise
+      name: string;
+      type: 'order' | 'shipping' | 'whole';
+      percentDiscount: number;
+      discountAmount: number;
+    } | null;
     totalAmount: number;            // Final total after all calculations
     shippingType: 'shipping' | 'selfShipping';
   }
@@ -98,7 +105,7 @@ const response = await fetch('https://your-api.com/api/orders/calculate-price', 
 const result = await response.json();
 ```
 
-### Example Response
+### Example Response (Order < 400 BYN)
 
 ```json
 {
@@ -122,6 +129,7 @@ const result = await response.json();
     ],
     "subtotal": 130.00,
     "shippingCost": 20.00,
+    "freeShipping": false,
     "discount": {
       "baseDiscount": 0.00,
       "selfShippingDiscount": 0.00,
@@ -129,6 +137,37 @@ const result = await response.json();
       "description": "0% (<700 BYN)"
     },
     "totalAmount": 150.00,
+    "shippingType": "shipping",
+    "promocode": null
+  }
+}
+```
+
+### Example Response (Order ≥ 400 BYN - Free Shipping)
+
+```json
+{
+  "success": true,
+  "data": {
+    "products": [
+      {
+        "slug": "product-1",
+        "title": "Expensive Product",
+        "unitPrice": 200.00,
+        "quantity": 3,
+        "totalPrice": 600.00
+      }
+    ],
+    "subtotal": 600.00,
+    "shippingCost": 0.00,
+    "freeShipping": true,
+    "discount": {
+      "baseDiscount": 0.00,
+      "selfShippingDiscount": 0.00,
+      "totalDiscount": 0.00,
+      "description": "0% (<700 BYN)"
+    },
+    "totalAmount": 600.00,
     "shippingType": "shipping",
     "promocode": null
   }
@@ -143,6 +182,7 @@ const result = await response.json();
     "products": [...],
     "subtotal": 130.00,
     "shippingCost": 20.00,
+    "freeShipping": false,
     "discount": {
       "baseDiscount": 0.00,
       "selfShippingDiscount": 0.00,
@@ -361,8 +401,11 @@ headers: {
 | `email` | `string` | ✅ Yes | Customer's email |
 | `phone` | `string` | ✅ Yes | Customer's phone number |
 | `city` | `string` | ✅ Yes | Customer's city |
-| `address` | `string` | ✅ Yes | Customer's street address |
+| `address` | `string` | ✅ Yes* | Customer's delivery address (*deprecated - use `deliveryAddress`) |
+| `deliveryAddress` | `string` | ✅ Yes* | Customer's delivery address (*preferred field) |
 | `paymentMethod` | `string` | ✅ Yes | Either `"card"` or `"ERIP"` |
+
+> **Note:** Either `address` or `deliveryAddress` must be provided. `deliveryAddress` is the preferred field.
 
 ### Organization Fields (`isIndividual: false`)
 
@@ -371,13 +414,16 @@ headers: {
 | `organization` | `string` | ✅ Yes | Company name |
 | `fullName` | `string` | ✅ Yes | Contact person's full name |
 | `UNP` | `string` | ✅ Yes | Tax identification number |
-| `paymentAccount` | `string` | ✅ Yes | Bank account number |
+| `paymentAccount` | `string` | ✅ Yes | Bank account number (IBAN format, up to 28 chars, e.g., BY13 NBRB 3600 9000 0000 2Z00 AB00) |
 | `bankAdress` | `string` | ✅ Yes | Bank address |
 | `email` | `string` | ✅ Yes | Company email |
 | `phone` | `string` | ✅ Yes | Company phone |
 | `city` | `string` | ✅ Yes | Company city |
-| `address` | `string` | ✅ Yes | Company address |
+| `legalAddress` | `string` | ✅ Yes | Company's legal address (for official documents and invoices) |
+| `deliveryAddress` | `string` | ✅ Yes | Delivery address (where the order will be shipped) |
 | `paymentMethod` | `string` | ✅ Yes | Either `"ERIP"` or `"paymentAccount"` |
+
+> **Important:** For organizations, both `legalAddress` (for official documents) and `deliveryAddress` (for shipment) are required.
 
 ---
 
@@ -387,26 +433,67 @@ The final order price is calculated based on the shipping type:
 
 ### Shipping Type: `"shipping"` (Delivery)
 - **Base Price:** Sum of all products
-- **Shipping Cost:** +20 BYN
-- **Formula:** `totalAmount = subtotal + 20`
-- **Example:** 
-  - Products: 100 BYN
-  - Shipping: +20 BYN
-  - **Total: 120 BYN**
+- **Shipping Cost:** 
+  - FREE for orders ≥ 400 BYN
+  - +20 BYN for orders < 400 BYN
+- **Formula:** 
+  - If `subtotal >= 400`: `totalAmount = subtotal`
+  - If `subtotal < 400`: `totalAmount = subtotal + 20`
+- **Examples:** 
+  - **Order < 400 BYN:**
+    - Products: 350 BYN
+    - Shipping: +20 BYN
+    - **Total: 370 BYN**
+  - **Order ≥ 400 BYN:**
+    - Products: 450 BYN
+    - Shipping: FREE
+    - **Total: 450 BYN**
 
 ### Shipping Type: `"selfShipping"` (Self-Pickup)
 - **Base Price:** Sum of all products
-- **Discount:** -3% of subtotal
+- **Discount:** -3% of subtotal (always applied for self-pickup)
 - **Formula:** `totalAmount = subtotal - (subtotal × 0.03)`
 - **Example:**
-  - Products: 100 BYN
-  - Discount: -3 BYN (3%)
-  - **Total: 97 BYN**
+  - Products: 350 BYN
+  - Discount: -10.50 BYN (3%)
+  - **Total: 339.50 BYN**
+
+### Volume Discounts (Applied to BOTH Delivery and Self-Pickup)
+
+The system automatically applies volume discounts based on subtotal:
+
+| Subtotal Range | Discount | Applied To |
+|----------------|----------|------------|
+| < 700 BYN | 0% | - |
+| 700 - 1499 BYN | 5% | Delivery & Self-Pickup |
+| ≥ 1500 BYN | 20% | Delivery & Self-Pickup |
+
+**Examples:**
+
+1. **Delivery with volume discount (subtotal = 800 BYN):**
+   - Subtotal: 800 BYN
+   - Discount 5%: -40 BYN
+   - Shipping: FREE (≥400 BYN)
+   - **Total: 760 BYN**
+
+2. **Self-Pickup with volume discount (subtotal = 800 BYN):**
+   - Subtotal: 800 BYN
+   - Discount 5%: -40 BYN
+   - Self-Pickup discount 3%: -24 BYN
+   - **Total: 736 BYN**
+
+3. **Delivery with large order (subtotal = 1600 BYN):**
+   - Subtotal: 1600 BYN
+   - Discount 20%: -320 BYN
+   - Shipping: FREE (≥400 BYN)
+   - **Total: 1280 BYN**
 
 ### Important Notes:
-- The `subtotal` field contains the sum of all products **before** shipping/discount
-- The `totalAmount` field contains the **final price** after applying shipping or discount
-- These calculations are done automatically on the backend
+- The `subtotal` field contains the sum of all products **before** shipping/discounts
+- The `totalAmount` field contains the **final price** after applying all shipping costs and discounts
+- Volume discounts and self-pickup discounts are **cumulative** (both apply for self-pickup)
+- Free shipping applies when subtotal ≥ 400 BYN (only for delivery type)
+- All calculations are done automatically on the backend
 - The frontend should display both subtotal and total to the user
 
 ---
@@ -647,7 +734,8 @@ const orderData = {
   email: "company@example.com",
   phone: "+375171234567",
   city: "Минск",
-  address: "ул. Промышленная, 50",
+  legalAddress: "ул. Юридическая, 5, офис 101, г. Минск",  // Legal address for documents
+  deliveryAddress: "ул. Промышленная, 50, склад 3, г. Минск",  // Delivery address
   paymentMethod: "paymentAccount",
   type: "shipping",
   comment: "Требуется счет-фактура"
@@ -705,7 +793,8 @@ const orderData = {
   email: "ip.ivanov@example.com",
   phone: "+375162345678",
   city: "Брест",
-  address: "ул. Советская, 15",
+  legalAddress: "ул. Советская, 15, г. Брест",  // Legal address for documents
+  deliveryAddress: "ул. Складская, 8, г. Брест",  // Delivery address
   paymentMethod: "ERIP",
   type: "shipping"
 };
@@ -1113,7 +1202,8 @@ interface OrganizationPaymentRequest extends BasePaymentRequest {
   email: string;
   phone: string;
   city: string;
-  address: string;
+  legalAddress: string;  // Legal address for documents and invoices
+  deliveryAddress: string;  // Delivery address for shipment
   paymentMethod: 'ERIP' | 'paymentAccount';
 }
 
@@ -1620,7 +1710,8 @@ test('Organization payment account creates order', async () => {
       email: 'company@test.com',
       phone: '+375171234567',
       city: 'Minsk',
-      address: 'Office Street 1',
+      legalAddress: 'Legal Street 1, Office 101',
+      deliveryAddress: 'Warehouse Street 5',
       paymentMethod: 'paymentAccount'
     })
   });

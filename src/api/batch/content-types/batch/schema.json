@@ -4,10 +4,11 @@
   "info": {
     "singularName": "batch",
     "pluralName": "batches",
-    "displayName": "Batch"
+    "displayName": "Batch",
+    "description": ""
   },
   "options": {
-    "draftAndPublish": true
+    "draftAndPublish": false
   },
   "attributes": {
     "name": {

@@ -24,6 +24,12 @@
     "address": {
       "type": "string"
     },
+    "legalAddress": {
+      "type": "string"
+    },
+    "deliveryAddress": {
+      "type": "string"
+    },
     "postalCode": {
       "type": "string"
     },

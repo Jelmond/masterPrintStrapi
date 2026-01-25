@@ -29,11 +29,21 @@ export default {
           products: {
             populate: {
               images: true,
-              categories: true,
-              tags: true,
-              batch: true,
-              designers: true,
-              polishes: true
+              categories: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              tags: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              batch: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              designers: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              polishes: {
+                where: { publishedAt: { $notNull: true } }
+              }
             }
           }
         }
@@ -65,11 +75,21 @@ export default {
         },
         populate: {
           images: true,
-          categories: true,
-          tags: true,
-          batch: true,
-          designers: true,
-          polishes: true
+          categories: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          tags: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          batch: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          designers: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          polishes: {
+            where: { publishedAt: { $notNull: true } }
+          }
         }
       });
 
@@ -84,11 +104,21 @@ export default {
           products: {
             populate: {
               images: true,
-              categories: true,
-              tags: true,
-              batch: true,
-              designers: true,
-              polishes: true
+              categories: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              tags: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              batch: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              designers: {
+                where: { publishedAt: { $notNull: true } }
+              },
+              polishes: {
+                where: { publishedAt: { $notNull: true } }
+              }
             }
           }
         }
@@ -108,11 +138,21 @@ export default {
         },
         populate: {
           images: true,
-          categories: true,
-          tags: true,
-          batch: true,
-          designers: true,
-          polishes: true
+          categories: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          tags: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          batch: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          designers: {
+            where: { publishedAt: { $notNull: true } }
+          },
+          polishes: {
+            where: { publishedAt: { $notNull: true } }
+          }
         }
       });
 

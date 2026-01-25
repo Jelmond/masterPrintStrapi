@@ -391,9 +391,11 @@ export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    deliveryAddress: Schema.Attribute.String;
     email: Schema.Attribute.String;
     fullName: Schema.Attribute.String;
     isIndividual: Schema.Attribute.Boolean;
+    legalAddress: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -417,12 +419,13 @@ export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
 export interface ApiBatchBatch extends Struct.CollectionTypeSchema {
   collectionName: 'batches';
   info: {
+    description: '';
     displayName: 'Batch';
     pluralName: 'batches';
     singularName: 'batch';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
@@ -448,7 +451,7 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     singularName: 'category';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
@@ -479,12 +482,13 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
 export interface ApiDesignerDesigner extends Struct.CollectionTypeSchema {
   collectionName: 'designers';
   info: {
+    description: '';
     displayName: 'Designer';
     pluralName: 'designers';
     singularName: 'designer';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
@@ -619,12 +623,13 @@ export interface ApiPaymentPayment extends Struct.CollectionTypeSchema {
 export interface ApiPolishPolish extends Struct.CollectionTypeSchema {
   collectionName: 'polishes';
   info: {
+    description: '';
     displayName: 'Polish';
     pluralName: 'polishes';
     singularName: 'polish';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
@@ -734,12 +739,13 @@ export interface ApiPromocodePromocode extends Struct.CollectionTypeSchema {
 export interface ApiTagTag extends Struct.CollectionTypeSchema {
   collectionName: 'tags';
   info: {
+    description: '';
     displayName: 'Tag';
     pluralName: 'tags';
     singularName: 'tag';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;

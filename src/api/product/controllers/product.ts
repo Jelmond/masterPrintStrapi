@@ -1,59 +1,126 @@
 /**
  * product controller
+ * Fixed to filter only published related entities (categories, tags, batch, designers, polishes)
  */
 
 import { factories } from '@strapi/strapi'
 
 export default factories.createCoreController('api::product.product', ({ strapi }) => ({
   async find(ctx) {
-    // Always use the same populate structure
-    ctx.query.populate = {
-      batch: true,
-      designers: true,
-      polishes: true,
-      images: true,
-      categories: true,
-      tags: true,
-    };
+    // Use db.query to properly filter published related entities
+    const products = await strapi.db.query('api::product.product').findMany({
+      populate: {
+        batch: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+        designers: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+        polishes: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+        images: true,
+        categories: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+        tags: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+      },
+    });
     
-    return await super.find(ctx);
+    return { data: products, meta: {} };
   },
   
   async findOne(ctx) {
-    // Always use the same populate structure
-    ctx.query.populate = {
-      batch: true,
-      designers: true,
-      polishes: true,
-      images: true,
-      categories: true,
-      tags: true,
-    };
-    
     // Если передан slug вместо id, ищем по slug
     const { id } = ctx.params;
+    const productId = id && !/^\d+$/.test(id) ? null : (typeof id === 'string' ? parseInt(id) : id);
+    
+    let product;
+    
     if (id && !/^\d+$/.test(id)) {
       // Это не числовой id, значит это slug
-      const product = await strapi.db.query('api::product.product').findOne({
+      product = await strapi.db.query('api::product.product').findOne({
         where: { slug: id },
         populate: {
-          batch: true,
-          designers: true,
-          polishes: true,
+          batch: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          designers: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          polishes: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
           images: true,
-          categories: true,
-          tags: true,
+          categories: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          tags: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
         },
       });
-      
-      if (!product) {
-        return ctx.notFound('Product not found');
-      }
-      
-      return { data: product };
+    } else {
+      // Ищем по id
+      product = await strapi.db.query('api::product.product').findOne({
+        where: { id: productId },
+        populate: {
+          batch: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          designers: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          polishes: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          images: true,
+          categories: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          tags: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+        },
+      });
     }
     
-    // Иначе используем стандартный поиск по id
-    return await super.findOne(ctx);
+    if (!product) {
+      return ctx.notFound('Product not found');
+    }
+    
+    return { data: product };
   },
 }));

@@ -18,7 +18,9 @@ interface AddressInput {
   email?: string;
   phone?: string;
   city?: string;
-  address?: string;
+  address?: string; // Deprecated - use deliveryAddress instead
+  legalAddress?: string; // Юридический адрес (для юр. лиц)
+  deliveryAddress?: string; // Адрес доставки
   organization?: string;
   UNP?: string;
   paymentAccount?: string;
@@ -139,10 +141,12 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     console.log('Email:', addressInput.email || 'N/A');
     console.log('Phone:', addressInput.phone || 'N/A');
     console.log('City:', addressInput.city || 'N/A');
-    console.log('Address:', addressInput.address || 'N/A');
+    console.log('Address (deprecated):', addressInput.address || 'N/A');
+    console.log('Delivery Address:', addressInput.deliveryAddress || 'N/A');
     if (addressInput.organization) {
       console.log('Organization:', addressInput.organization);
       console.log('UNP:', addressInput.UNP || 'N/A');
+      console.log('Legal Address:', addressInput.legalAddress || 'N/A');
     }
     console.log('-'.repeat(80));
 
@@ -154,7 +158,9 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
         email: addressInput.email || null,
         phone: addressInput.phone || null,
         city: addressInput.city || null,
-        address: addressInput.address || null,
+        address: addressInput.address || null, // Deprecated - for backward compatibility
+        legalAddress: addressInput.legalAddress || null, // Юридический адрес
+        deliveryAddress: addressInput.deliveryAddress || null, // Адрес доставки
         organization: addressInput.organization || null,
         UNP: addressInput.UNP || null,
         paymentAccount: addressInput.paymentAccount || null,
@@ -192,8 +198,13 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     }
 
     if (shippingType === 'shipping') {
-      // Add 20 rubles for shipping
-      shippingCost = 20;
+      // Calculate shipping cost based on subtotal
+      if (subtotal >= 400) {
+        shippingCost = 0; // Free shipping for orders >= 400 BYN
+      } else {
+        shippingCost = 20; // 20 BYN shipping cost for orders < 400 BYN
+      }
+      
       discount = baseDiscount;
       totalAmount = subtotal - discount + shippingCost;
       
@@ -202,11 +213,15 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       if (discount > 0) {
         console.log(`   Скидка (${discountDescription}): -${discount.toFixed(2)} BYN`);
       }
-      console.log(`   Shipping Cost: +${shippingCost.toFixed(2)} BYN`);
+      if (subtotal >= 400) {
+        console.log(`   Доставка:      Бесплатно (≥400 BYN)`);
+      } else {
+        console.log(`   Shipping Cost: +${shippingCost.toFixed(2)} BYN`);
+      }
       console.log(`   ─────────────────────────────────`);
       console.log(`   TOTAL:         ${totalAmount.toFixed(2)} BYN ✅`);
       
-      strapi.log.info(`Shipping type: shipping - Base discount: ${discount.toFixed(2)} BYN (${discountDescription}), Shipping: ${shippingCost} BYN. Subtotal: ${subtotal}, Total: ${totalAmount}`);
+      strapi.log.info(`Shipping type: shipping - Base discount: ${discount.toFixed(2)} BYN (${discountDescription}), Shipping: ${shippingCost} BYN (Free: ${subtotal >= 400}). Subtotal: ${subtotal}, Total: ${totalAmount}`);
     } else if (shippingType === 'selfShipping') {
       // Apply base discount + additional 3% for self-pickup
       selfShippingDiscount = subtotal * 0.03; // Additional 3% for self-pickup

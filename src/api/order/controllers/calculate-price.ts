@@ -83,8 +83,13 @@ export default {
       }
 
       if (shippingType === 'shipping') {
-        // Add 20 rubles for shipping
-        shippingCost = 20;
+        // Calculate shipping cost based on subtotal
+        if (subtotal >= 400) {
+          shippingCost = 0; // Free shipping for orders >= 400 BYN
+        } else {
+          shippingCost = 20; // 20 BYN shipping cost for orders < 400 BYN
+        }
+        
         discount = baseDiscount;
         totalAmount = subtotal - discount + shippingCost;
       } else if (shippingType === 'selfShipping') {
@@ -151,6 +156,7 @@ export default {
           products: productDetails,
           subtotal: parseFloat(subtotal.toFixed(2)),
           shippingCost: shippingType === 'shipping' ? parseFloat(shippingCost.toFixed(2)) : 0,
+          freeShipping: shippingType === 'shipping' && subtotal >= 400, // Flag for free shipping
           discount: {
             baseDiscount: parseFloat(baseDiscount.toFixed(2)),
             selfShippingDiscount: shippingType === 'selfShipping' ? parseFloat(selfShippingDiscount.toFixed(2)) : 0,
