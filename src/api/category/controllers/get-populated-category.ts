@@ -6,35 +6,15 @@
 
     console.log('id', id)
 
-    let entity;
-    
-    try {
-      entity = await strapi.db.query('api::category.category').findOne({
-        where: { id },
-        populate: {
-          products: {
-            where: {
-              isHidden: false  // Only visible products
-            },
-            populate: ['images', 'category', 'tags', 'batch', 'designers', 'polishes']
-          }
+    const entity = await strapi.db.query('api::category.category').findOne({
+      where: { id },
+      populate: {
+        products: {
+          // БЕЗ фильтра isHidden в where - фильтруем на уровне приложения
+          populate: ['images', 'category', 'tags', 'batch', 'designers', 'polishes']
         }
-      });
-    } catch (error: any) {
-      // Если ошибка из-за отсутствия колонки isHidden, пробуем без фильтра
-      if (error.message && (error.message.includes('isHidden') || error.message.includes('no such column'))) {
-        entity = await strapi.db.query('api::category.category').findOne({
-          where: { id },
-          populate: {
-            products: {
-              populate: ['images', 'category', 'tags', 'batch', 'designers', 'polishes']
-            }
-          }
-        });
-      } else {
-        throw error;
       }
-    }
+    });
 
     console.log('entity', entity);
 

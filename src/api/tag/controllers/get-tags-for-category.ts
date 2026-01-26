@@ -4,48 +4,22 @@ export default {
 
         console.log('id', id)
 
-        let tags;
-        
-        try {
-            // Получаем все теги, у которых есть продукты с нужной категорией
-            tags = await strapi.db.query('api::tag.tag').findMany({
-                where: {
-                    products: {
-                        categories: {
-                            id: id
-                        }
-                    }
-                },
-                populate: {
-                    products: {
-                        where: {
-                            isHidden: false  // Only visible products
-                        },
-                        populate: ['images', 'tags', 'categories', 'batch', 'designers', 'polishes']
+        // Получаем все теги, у которых есть продукты с нужной категорией
+        const tags = await strapi.db.query('api::tag.tag').findMany({
+            where: {
+                products: {
+                    categories: {
+                        id: id
                     }
                 }
-            });
-        } catch (error: any) {
-            // Если ошибка из-за отсутствия колонки isHidden, пробуем без фильтра
-            if (error.message && (error.message.includes('isHidden') || error.message.includes('no such column'))) {
-                tags = await strapi.db.query('api::tag.tag').findMany({
-                    where: {
-                        products: {
-                            categories: {
-                                id: id
-                            }
-                        }
-                    },
-                    populate: {
-                        products: {
-                            populate: ['images', 'tags', 'categories', 'batch', 'designers', 'polishes']
-                        }
-                    }
-                });
-            } else {
-                throw error;
+            },
+            populate: {
+                products: {
+                    // БЕЗ фильтра isHidden в where - фильтруем на уровне приложения
+                    populate: ['images', 'tags', 'categories', 'batch', 'designers', 'polishes']
+                }
             }
-        }
+        });
 
         // Оставляем только те продукты, которые относятся к нужной категории и видимы
         const data = tags.map(tag => ({
