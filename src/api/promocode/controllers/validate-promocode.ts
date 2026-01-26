@@ -35,6 +35,22 @@ export default {
         });
       }
 
+      // Check if promocode is still valid (validUntil check)
+      if (promocode.validUntil) {
+        const now = new Date();
+        const validUntil = new Date(promocode.validUntil);
+        
+        // МСК = UTC+3, но Date объекты в JavaScript уже в UTC
+        // Если validUntil хранится в UTC, нужно учесть разницу
+        // Для простоты сравниваем напрямую, так как Strapi обычно хранит в UTC
+        if (now >= validUntil) {
+          return ctx.send({
+            valid: false,
+            message: 'Срок действия промокода истек',
+          });
+        }
+      }
+
       // Check available usages
       const currentUsages = promocode.usages?.length || 0;
       if (currentUsages >= promocode.availableUsages) {

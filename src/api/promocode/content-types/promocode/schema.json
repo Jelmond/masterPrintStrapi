@@ -27,6 +27,9 @@
     "isActual": {
       "type": "boolean"
     },
+    "validUntil": {
+      "type": "datetime"
+    },
     "availableUsages": {
       "type": "integer"
     },

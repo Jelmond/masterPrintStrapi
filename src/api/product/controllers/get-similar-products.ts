@@ -10,7 +10,10 @@ export default {
             console.log('Total products in database:', totalCount);
 
             const products = await strapi.db.query('api::product.product').findMany({
-                where: { publishedAt: { $notNull: true } },
+                where: { 
+                    publishedAt: { $notNull: true },
+                    isHidden: false  // Only visible products
+                },
                 populate: {
                     images: true,
                     categories: {
@@ -51,12 +54,13 @@ export default {
             return ctx.badRequest('No valid product slugs provided');
         }
 
-        // Get the source products to find their categories and tags (only published)
+        // Get the source products to find their categories and tags (only published and active)
         const sourceProducts = await strapi.db.query('api::product.product').findMany({
             where: {
                 slug: {
                     $in: productSlugs
-                }
+                },
+                isHidden: false  // Only visible products
             },
             populate: {
                 categories: {
@@ -91,6 +95,9 @@ export default {
                         slug: {
                             $notIn: sourceProductSlugs // Exclude the source products
                         }
+                    },
+                    {
+                        isHidden: false  // Only visible products
                     },
                     {
                         $or: [

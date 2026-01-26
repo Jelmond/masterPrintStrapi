@@ -678,6 +678,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       true
     >;
     isBestseller: Schema.Attribute.Boolean;
+    isHidden: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isNew: Schema.Attribute.Boolean;
     isOnSale: Schema.Attribute.Boolean;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -733,6 +734,7 @@ export interface ApiPromocodePromocode extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     usages: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
+    validUntil: Schema.Attribute.DateTime;
   };
 }
 

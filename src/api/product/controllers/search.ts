@@ -27,6 +27,9 @@ export default {
         populate: {
           image: true,
           products: {
+            where: {
+              isHidden: false  // Only visible products
+            },
             populate: {
               images: true,
               categories: {
@@ -71,7 +74,8 @@ export default {
           ],
           publishedAt: {
             $notNull: true
-          }
+          },
+          isHidden: false  // Only visible products
         },
         populate: {
           images: true,
@@ -134,7 +138,8 @@ export default {
           },
           publishedAt: {
             $notNull: true
-          }
+          },
+          isHidden: false  // Only visible products
         },
         populate: {
           images: true,

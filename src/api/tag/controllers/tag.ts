@@ -14,6 +14,9 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
       },
       populate: {
         products: {
+          where: {
+            isHidden: false  // Only visible products
+          },
           populate: {
             batch: {
               where: {
@@ -59,6 +62,9 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
       },
       populate: {
         products: {
+          where: {
+            isHidden: false  // Only visible products
+          },
           populate: {
             batch: {
               where: {

@@ -7,39 +7,109 @@ import { factories } from '@strapi/strapi'
 
 export default factories.createCoreController('api::product.product', ({ strapi }) => ({
   async find(ctx) {
-    // Use db.query to properly filter published related entities
-    const products = await strapi.db.query('api::product.product').findMany({
-      populate: {
-        batch: {
-          where: {
-            publishedAt: { $notNull: true }
-          }
+    // Используем db.query для явной фильтрации
+    // Сначала получаем фильтры из query string (если есть)
+    const userFilters: any = ctx.query.filters || {};
+    
+    // Строим where условие
+    const where: any = {};
+    
+    // Копируем пользовательские фильтры
+    if (userFilters && typeof userFilters === 'object') {
+      Object.assign(where, userFilters);
+    }
+    
+    // Пробуем добавить фильтр isHidden, но если колонка не существует, запрос все равно выполнится
+    // и мы отфильтруем результаты вручную
+    where.isHidden = false;
+    
+    let products;
+    try {
+      products = await strapi.db.query('api::product.product').findMany({
+        where,
+        populate: {
+          batch: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          designers: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          polishes: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          images: true,
+          categories: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
+          tags: {
+            where: {
+              publishedAt: { $notNull: true }
+            }
+          },
         },
-        designers: {
-          where: {
-            publishedAt: { $notNull: true }
-          }
-        },
-        polishes: {
-          where: {
-            publishedAt: { $notNull: true }
-          }
-        },
-        images: true,
-        categories: {
-          where: {
-            publishedAt: { $notNull: true }
-          }
-        },
-        tags: {
-          where: {
-            publishedAt: { $notNull: true }
-          }
-        },
-      },
+      });
+    } catch (error: any) {
+      // Если ошибка из-за отсутствия колонки isHidden, пробуем без фильтра
+      if (error.message && (error.message.includes('isHidden') || error.message.includes('no such column'))) {
+        products = await strapi.db.query('api::product.product').findMany({
+          where: userFilters,
+          populate: {
+            batch: {
+              where: {
+                publishedAt: { $notNull: true }
+              }
+            },
+            designers: {
+              where: {
+                publishedAt: { $notNull: true }
+              }
+            },
+            polishes: {
+              where: {
+                publishedAt: { $notNull: true }
+              }
+            },
+            images: true,
+            categories: {
+              where: {
+                publishedAt: { $notNull: true }
+              }
+            },
+            tags: {
+              where: {
+                publishedAt: { $notNull: true }
+              }
+            },
+          },
+        });
+      } else {
+        throw error;
+      }
+    }
+    
+    // Фильтруем результаты на уровне приложения (гарантированно скрываем isHidden: true)
+    const visibleProducts = products.filter((product: any) => {
+      // Если есть isHidden, проверяем его (isHidden: false = видим)
+      if (product.isHidden !== undefined) {
+        return product.isHidden === false;
+      }
+      // Если есть старое поле isActive, проверяем его (isActive: true = видим)
+      if (product.isActive !== undefined) {
+        return product.isActive === true;
+      }
+      // Если ни одно поле не существует, считаем продукт видимым (для совместимости)
+      return true;
     });
     
-    return { data: products, meta: {} };
+    return { data: visibleProducts, meta: {} };
   },
   
   async findOne(ctx) {
@@ -84,44 +154,65 @@ export default factories.createCoreController('api::product.product', ({ strapi 
     
     if (!isNumericId) {
       // Это slug, ищем через db.query
-      const product = await strapi.db.query('api::product.product').findOne({
-        where: { slug: id.toString() },
-        populate: {
-          batch: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          designers: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          polishes: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          images: true,
-          categories: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          tags: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
+      // Сначала ищем продукт без фильтра isHidden (на случай, если колонка еще не создана)
+      const populateConfig = {
+        batch: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
         },
+        designers: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+        polishes: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+        images: true,
+        categories: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+        tags: {
+          where: {
+            publishedAt: { $notNull: true }
+          }
+        },
+      };
+      
+      // Ищем продукт по slug
+      const product = await strapi.db.query('api::product.product').findOne({
+        where: { 
+          slug: id.toString()
+        },
+        populate: populateConfig,
       });
       
       if (!product) {
         return ctx.notFound('Product not found');
       }
       
+      // Проверяем видимость продукта (поддерживаем оба варианта: isHidden и isActive)
+      // isHidden: true = скрыт, isActive: false = скрыт (старая логика)
+      const isHidden = (product as any).isHidden === true;
+      const isActiveOld = (product as any).isActive === false; // Старое поле: false = скрыт
+      
+      if (isHidden || isActiveOld) {
+        return ctx.notFound('Product not found');
+      }
+      
       return { data: product };
     }
+    
+    // Добавляем фильтр isHidden для поиска по id
+    if (!ctx.query.filters) {
+      ctx.query.filters = {};
+    }
+    (ctx.query.filters as any).isHidden = { $eq: false };
     
     // Иначе используем стандартный поиск по id через super.findOne
     return await super.findOne(ctx);

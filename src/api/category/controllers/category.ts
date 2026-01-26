@@ -7,96 +7,225 @@ import { factories } from '@strapi/strapi'
 export default factories.createCoreController('api::category.category', ({ strapi }) => ({
   async find(ctx) {
     // Use db.query to filter products and their relations by publishedAt
-    const categories = await strapi.db.query('api::category.category').findMany({
-      where: {
-        publishedAt: { $notNull: true }
-      },
-      populate: {
-        image: true,
-        products: {
+    let categories;
+    
+    try {
+      categories = await strapi.db.query('api::category.category').findMany({
+        where: {
+          publishedAt: { $notNull: true }
+        },
+        populate: {
+          image: true,
+          products: {
+            where: {
+              isHidden: false  // Only visible products
+            },
+            populate: {
+              batch: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              designers: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              polishes: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              images: true,
+              categories: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              tags: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+            }
+          },
+        },
+      });
+    } catch (error: any) {
+      // Если ошибка из-за отсутствия колонки isHidden, пробуем без фильтра
+      if (error.message && (error.message.includes('isHidden') || error.message.includes('no such column'))) {
+        categories = await strapi.db.query('api::category.category').findMany({
           where: {
-            // Products don't have draftAndPublish, so no filter needed
+            publishedAt: { $notNull: true }
           },
           populate: {
-            batch: {
-              where: {
-                publishedAt: { $notNull: true }
+            image: true,
+            products: {
+              populate: {
+                batch: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                designers: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                polishes: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                images: true,
+                categories: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                tags: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
               }
             },
-            designers: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-            polishes: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-            images: true,
-            categories: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-            tags: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
+          },
+        });
+      } else {
+        throw error;
+      }
+    }
+    
+    // Фильтруем скрытые продукты на уровне приложения
+    const filteredCategories = categories.map((category: any) => {
+      if (category.products && Array.isArray(category.products)) {
+        category.products = category.products.filter((product: any) => {
+          if (product.isHidden !== undefined) {
+            return product.isHidden === false;
           }
-        },
-      },
+          if (product.isActive !== undefined) {
+            return product.isActive === true;
+          }
+          return true;
+        });
+      }
+      return category;
     });
     
-    return { data: categories, meta: {} };
+    return { data: filteredCategories, meta: {} };
   },
   
   async findOne(ctx) {
     const { id } = ctx.params;
     
-    const category = await strapi.db.query('api::category.category').findOne({
-      where: {
-        id: typeof id === 'string' ? parseInt(id) : id,
-        publishedAt: { $notNull: true }
-      },
-      populate: {
-        image: true,
-        products: {
-          populate: {
-            batch: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-            designers: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-            polishes: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-            images: true,
-            categories: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-            tags: {
-              where: {
-                publishedAt: { $notNull: true }
-              }
-            },
-          }
+    let category;
+    
+    try {
+      category = await strapi.db.query('api::category.category').findOne({
+        where: {
+          id: typeof id === 'string' ? parseInt(id) : id,
+          publishedAt: { $notNull: true }
         },
-      },
-    });
+        populate: {
+          image: true,
+          products: {
+            where: {
+              isHidden: false  // Only visible products
+            },
+            populate: {
+              batch: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              designers: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              polishes: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              images: true,
+              categories: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+              tags: {
+                where: {
+                  publishedAt: { $notNull: true }
+                }
+              },
+            }
+          },
+        },
+      });
+    } catch (error: any) {
+      // Если ошибка из-за отсутствия колонки isHidden, пробуем без фильтра
+      if (error.message && (error.message.includes('isHidden') || error.message.includes('no such column'))) {
+        category = await strapi.db.query('api::category.category').findOne({
+          where: {
+            id: typeof id === 'string' ? parseInt(id) : id,
+            publishedAt: { $notNull: true }
+          },
+          populate: {
+            image: true,
+            products: {
+              populate: {
+                batch: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                designers: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                polishes: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                images: true,
+                categories: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+                tags: {
+                  where: {
+                    publishedAt: { $notNull: true }
+                  }
+                },
+              }
+            },
+          },
+        });
+      } else {
+        throw error;
+      }
+    }
     
     if (!category) {
       return ctx.notFound('Category not found');
+    }
+    
+    // Фильтруем скрытые продукты на уровне приложения
+    if (category.products && Array.isArray(category.products)) {
+      category.products = category.products.filter((product: any) => {
+        if (product.isHidden !== undefined) {
+          return product.isHidden === false;
+        }
+        if (product.isActive !== undefined) {
+          return product.isActive === true;
+        }
+        return true;
+      });
     }
     
     return { data: category };

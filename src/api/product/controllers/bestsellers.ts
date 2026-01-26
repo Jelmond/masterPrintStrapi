@@ -10,7 +10,8 @@ export default {
           isBestseller: true,
           publishedAt: {
             $notNull: true
-          }
+          },
+          isHidden: false  // Only visible products
         },
         populate: {
           images: true,

@@ -67,9 +67,12 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       console.log(`   Input:`, JSON.stringify(productInput, null, 2));
       console.log(`   📌 Looking up product by slug: ${productInput.productSlug}`);
       
-      // Fetch product using slug
+      // Fetch product using slug (only active products)
       const product = await strapi.db.query('api::product.product').findOne({
-        where: { slug: productInput.productSlug },
+        where: { 
+          slug: productInput.productSlug,
+          isHidden: false  // Only visible products can be ordered
+        },
         populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
       });
 
@@ -260,8 +263,16 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
         });
 
         if (promocodeEntity && promocodeEntity.isActual) {
+          // Check if promocode is still valid (validUntil check)
+          let isExpired = false;
+          if (promocodeEntity.validUntil) {
+            const now = new Date();
+            const validUntil = new Date(promocodeEntity.validUntil);
+            isExpired = now >= validUntil;
+          }
+          
           const currentUsages = promocodeEntity.usages?.length || 0;
-          if (currentUsages < promocodeEntity.availableUsages) {
+          if (!isExpired && currentUsages < promocodeEntity.availableUsages) {
             promocodeApplied = true;
             const percentDiscount = promocodeEntity.percentDiscount / 100;
 
