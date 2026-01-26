@@ -45,15 +45,14 @@
     // Фильтруем скрытые продукты на уровне приложения (гарантированно)
     if (entity.products && Array.isArray(entity.products)) {
       entity.products = entity.products.filter((product: any) => {
-        // Если есть isHidden, проверяем его (isHidden: false = видим)
-        if (product.isHidden !== undefined) {
-          return product.isHidden === false;
+        // Скрываем только если явно isHidden: true или isActive: false
+        if (product.isHidden === true) {
+          return false;
         }
-        // Если есть старое поле isActive, проверяем его (isActive: true = видим)
-        if (product.isActive !== undefined) {
-          return product.isActive === true;
+        if (product.isActive === false) {
+          return false;
         }
-        // Если ни одно поле не существует, считаем продукт видимым (для совместимости)
+        // Во всех остальных случаях показываем
         return true;
       });
     }

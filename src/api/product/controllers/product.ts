@@ -97,15 +97,15 @@ export default factories.createCoreController('api::product.product', ({ strapi 
     
     // Фильтруем результаты на уровне приложения (гарантированно скрываем isHidden: true)
     const visibleProducts = products.filter((product: any) => {
-      // Если есть isHidden, проверяем его (isHidden: false = видим)
-      if (product.isHidden !== undefined) {
-        return product.isHidden === false;
+      // Если isHidden явно установлен в true - скрываем
+      if (product.isHidden === true) {
+        return false;
       }
-      // Если есть старое поле isActive, проверяем его (isActive: true = видим)
-      if (product.isActive !== undefined) {
-        return product.isActive === true;
+      // Если есть старое поле isActive и оно false - скрываем
+      if (product.isActive === false) {
+        return false;
       }
-      // Если ни одно поле не существует, считаем продукт видимым (для совместимости)
+      // Во всех остальных случаях (undefined, null, false для isHidden, true для isActive) - показываем
       return true;
     });
     
@@ -201,6 +201,7 @@ export default factories.createCoreController('api::product.product', ({ strapi 
       const isHidden = (product as any).isHidden === true;
       const isActiveOld = (product as any).isActive === false; // Старое поле: false = скрыт
       
+      // Скрываем только если явно установлено isHidden: true или isActive: false
       if (isHidden || isActiveOld) {
         return ctx.notFound('Product not found');
       }

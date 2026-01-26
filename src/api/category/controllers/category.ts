@@ -101,12 +101,14 @@ export default factories.createCoreController('api::category.category', ({ strap
     const filteredCategories = categories.map((category: any) => {
       if (category.products && Array.isArray(category.products)) {
         category.products = category.products.filter((product: any) => {
-          if (product.isHidden !== undefined) {
-            return product.isHidden === false;
+          // Скрываем только если явно isHidden: true или isActive: false
+          if (product.isHidden === true) {
+            return false;
           }
-          if (product.isActive !== undefined) {
-            return product.isActive === true;
+          if (product.isActive === false) {
+            return false;
           }
+          // Во всех остальных случаях показываем
           return true;
         });
       }
@@ -218,12 +220,14 @@ export default factories.createCoreController('api::category.category', ({ strap
     // Фильтруем скрытые продукты на уровне приложения
     if (category.products && Array.isArray(category.products)) {
       category.products = category.products.filter((product: any) => {
-        if (product.isHidden !== undefined) {
-          return product.isHidden === false;
+        // Скрываем только если явно isHidden: true или isActive: false
+        if (product.isHidden === true) {
+          return false;
         }
-        if (product.isActive !== undefined) {
-          return product.isActive === true;
+        if (product.isActive === false) {
+          return false;
         }
+        // Во всех остальных случаях показываем
         return true;
       });
     }
