@@ -43,16 +43,49 @@ export default factories.createCoreController('api::product.product', ({ strapi 
   },
   
   async findOne(ctx) {
-    // Если передан slug вместо id, ищем по slug
     const { id } = ctx.params;
-    const productId = id && !/^\d+$/.test(id) ? null : (typeof id === 'string' ? parseInt(id) : id);
     
-    let product;
+    if (!id) {
+      return ctx.badRequest('Product ID or slug is required');
+    }
     
-    if (id && !/^\d+$/.test(id)) {
-      // Это не числовой id, значит это slug
-      product = await strapi.db.query('api::product.product').findOne({
-        where: { slug: id },
+    // Настраиваем populate для связанных сущностей
+    ctx.query.populate = {
+      batch: {
+        filters: {
+          publishedAt: { $notNull: true }
+        }
+      },
+      designers: {
+        filters: {
+          publishedAt: { $notNull: true }
+        }
+      },
+      polishes: {
+        filters: {
+          publishedAt: { $notNull: true }
+        }
+      },
+      images: true,
+      categories: {
+        filters: {
+          publishedAt: { $notNull: true }
+        }
+      },
+      tags: {
+        filters: {
+          publishedAt: { $notNull: true }
+        }
+      },
+    };
+    
+    // Если передан slug вместо id, ищем по slug через db.query
+    const isNumericId = /^\d+$/.test(id.toString());
+    
+    if (!isNumericId) {
+      // Это slug, ищем через db.query
+      const product = await strapi.db.query('api::product.product').findOne({
+        where: { slug: id.toString() },
         populate: {
           batch: {
             where: {
@@ -82,45 +115,15 @@ export default factories.createCoreController('api::product.product', ({ strapi 
           },
         },
       });
-    } else {
-      // Ищем по id
-      product = await strapi.db.query('api::product.product').findOne({
-        where: { id: productId },
-        populate: {
-          batch: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          designers: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          polishes: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          images: true,
-          categories: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-          tags: {
-            where: {
-              publishedAt: { $notNull: true }
-            }
-          },
-        },
-      });
+      
+      if (!product) {
+        return ctx.notFound('Product not found');
+      }
+      
+      return { data: product };
     }
     
-    if (!product) {
-      return ctx.notFound('Product not found');
-    }
-    
-    return { data: product };
+    // Иначе используем стандартный поиск по id через super.findOne
+    return await super.findOne(ctx);
   },
 }));
