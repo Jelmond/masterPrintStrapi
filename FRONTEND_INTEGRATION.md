@@ -1401,13 +1401,18 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ cartItems }) => {
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState(''); // предпочтительно для доставки
 
-  // Organization fields
+  // Organization fields (для юрлиц обязательны legalAddress и deliveryAddress)
   const [organization, setOrganization] = useState('');
   const [unp, setUnp] = useState('');
   const [paymentAccount, setPaymentAccount] = useState('');
   const [bankAdress, setBankAdress] = useState('');
+  const [legalAddress, setLegalAddress] = useState('');
+  const [orgDeliveryAddress, setOrgDeliveryAddress] = useState('');
 
+  const [type, setType] = useState<'shipping' | 'selfShipping'>('shipping');
+  const [promocode, setPromocode] = useState('');
   const [comment, setComment] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1428,17 +1433,20 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({ cartItems }) => {
         email,
         phone,
         city,
-        address,
-        type: 'shipping',
-        comment: comment || undefined
+        deliveryAddress: deliveryAddress || address, // предпочтительно deliveryAddress
+        type,
+        comment: comment || undefined,
+        ...(promocode ? { promocode } : {})
       };
 
-      // Add organization-specific fields
+      // Add organization-specific fields (для юрлиц обязательны legalAddress и deliveryAddress)
       if (!isIndividual) {
         requestData.organization = organization;
         requestData.UNP = unp;
         requestData.paymentAccount = paymentAccount;
         requestData.bankAdress = bankAdress;
+        requestData.legalAddress = legalAddress;
+        requestData.deliveryAddress = orgDeliveryAddress;
       }
 
       const response = await fetch('https://your-api.com/api/payments/initiate', {

@@ -33,17 +33,18 @@ export default {
       const productDetails = [];
 
       for (const productInput of products) {
-        // Fetch product using slug (only active products)
+        // Fetch product by slug (then check isHidden in code)
         const product = await strapi.db.query('api::product.product').findOne({
-          where: { 
-            slug: productInput.productSlug,
-            isHidden: false  // Only visible products can be calculated
-          },
+          where: { slug: productInput.productSlug },
           populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
         });
 
         if (!product) {
           return ctx.notFound(`Product with slug "${productInput.productSlug}" not found`);
+        }
+
+        if (product.isHidden === true) {
+          return ctx.badRequest(`Product "${productInput.productSlug}" is not available for ordering`);
         }
 
         if (!product.price) {

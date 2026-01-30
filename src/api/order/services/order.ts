@@ -67,18 +67,21 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       console.log(`   Input:`, JSON.stringify(productInput, null, 2));
       console.log(`   📌 Looking up product by slug: ${productInput.productSlug}`);
       
-      // Fetch product using slug (only active products)
+      // Fetch product by slug (then check isHidden in code to avoid DB column issues)
       const product = await strapi.db.query('api::product.product').findOne({
-        where: { 
-          slug: productInput.productSlug,
-          isHidden: false  // Only visible products can be ordered
-        },
+        where: { slug: productInput.productSlug },
         populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
       });
 
       if (!product) {
         console.error(`   ❌ Product with slug ${productInput.productSlug} not found`);
         throw new Error(`Product with slug ${productInput.productSlug} not found`);
+      }
+
+      // Only visible products can be ordered (check in code for backward compatibility)
+      if (product.isHidden === true) {
+        console.error(`   ❌ Product with slug ${productInput.productSlug} is hidden`);
+        throw new Error(`Product with slug ${productInput.productSlug} is not available for ordering`);
       }
 
       if (!product.price) {
