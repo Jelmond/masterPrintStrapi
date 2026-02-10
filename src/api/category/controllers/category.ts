@@ -47,20 +47,15 @@ export default factories.createCoreController('api::category.category', ({ strap
       },
     });
     
-    // Фильтруем скрытые продукты на уровне приложения
+    // Фильтруем скрытые продукты и дедуплицируем по id (join по manyToMany даёт дубликаты)
     const filteredCategories = categories.map((category: any) => {
       if (category.products && Array.isArray(category.products)) {
-        category.products = category.products.filter((product: any) => {
-          // Скрываем только если явно isHidden: true или isActive: false
-          if (product.isHidden === true) {
-            return false;
-          }
-          if (product.isActive === false) {
-            return false;
-          }
-          // Во всех остальных случаях показываем
-          return true;
-        });
+        const byId = new Map<number, any>();
+        for (const product of category.products) {
+          if (product.isHidden === true || product.isActive === false) continue;
+          byId.set(product.id, product);
+        }
+        category.products = Array.from(byId.values());
       }
       return category;
     });
@@ -116,19 +111,13 @@ export default factories.createCoreController('api::category.category', ({ strap
       return ctx.notFound('Category not found');
     }
     
-    // Фильтруем скрытые продукты на уровне приложения
     if (category.products && Array.isArray(category.products)) {
-      category.products = category.products.filter((product: any) => {
-        // Скрываем только если явно isHidden: true или isActive: false
-        if (product.isHidden === true) {
-          return false;
-        }
-        if (product.isActive === false) {
-          return false;
-        }
-        // Во всех остальных случаях показываем
-        return true;
-      });
+      const byId = new Map<number, any>();
+      for (const product of category.products) {
+        if (product.isHidden === true || product.isActive === false) continue;
+        byId.set(product.id, product);
+      }
+      category.products = Array.from(byId.values());
     }
     
     return { data: category };

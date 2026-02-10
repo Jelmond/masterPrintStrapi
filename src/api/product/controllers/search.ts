@@ -1,28 +1,55 @@
 /**
  * search controller for products and categories
+ * Search by: product title, articul, material, size; category title; tag title
  */
+
+function normalizeSearchTerm(raw: unknown): string {
+  const str = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
+  const s = String(str).trim();
+  // Нормализация: схлопнуть пробелы, Unicode NFC (чтобы "е" и "е" из разных кодировок совпадали)
+  return s.replace(/\s+/g, ' ').normalize('NFC');
+}
+
+/** Все варианты строки по регистру для независимого от кейса поиска (БД не всегда корректно обрабатывает $containsi). */
+function caseVariants(term: string): string[] {
+  const lower = term.toLowerCase();
+  const upper = term.toUpperCase();
+  const variants = [term, lower, upper];
+  return [...new Set(variants)];
+}
+
+/** Условия для поиска по одному текстовому полю: без учёта регистра (несколько вариантов запроса) + для 1 символа ещё $startsWithi. */
+function textMatchConditions(
+  field: string,
+  searchTerm: string
+): Array<Record<string, { $containsi: string } | { $startsWithi: string }>> {
+  const conditions: Array<Record<string, { $containsi: string } | { $startsWithi: string }>> = [];
+  for (const variant of caseVariants(searchTerm)) {
+    conditions.push({ [field]: { $containsi: variant } });
+  }
+  if (searchTerm.length === 1) {
+    for (const variant of caseVariants(searchTerm)) {
+      conditions.push({ [field]: { $startsWithi: variant } });
+    }
+  }
+  return conditions;
+}
 
 export default {
   async search(ctx) {
     try {
-      const { query } = ctx.query;
-      
-      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      const rawQuery = ctx.query?.query ?? ctx.query?.q;
+      const searchTerm = normalizeSearchTerm(rawQuery);
+
+      if (!searchTerm) {
         return ctx.badRequest('Search query is required');
       }
-
-      const searchTerm = query.trim();
       
-      // Search categories using db.query to get database IDs
+      // Search categories (для 1 буквы — также $startsWithi)
+      const categoryOrConditions = textMatchConditions('title', searchTerm);
       const categories = await strapi.db.query('api::category.category').findMany({
         where: {
-          $or: [
-            {
-              title: {
-                $containsi: searchTerm
-              }
-            }
-          ]
+          $or: categoryOrConditions
         },
         populate: {
           image: true,
@@ -52,26 +79,17 @@ export default {
         }
       });
 
-      // Search products using db.query to get database IDs (matches get-similar-products approach)
+      // Search products: title, articul, material, size, slug (для 1 буквы — также $startsWithi)
+      const productOrConditions = [
+        ...textMatchConditions('title', searchTerm),
+        ...textMatchConditions('articul', searchTerm),
+        ...textMatchConditions('slug', searchTerm),
+        ...textMatchConditions('material', searchTerm),
+        ...textMatchConditions('size', searchTerm)
+      ];
       const products = await strapi.db.query('api::product.product').findMany({
         where: {
-          $or: [
-            {
-              title: {
-                $containsi: searchTerm
-              }
-            },
-            {
-              material: {
-                $containsi: searchTerm
-              }
-            },
-            {
-              size: {
-                $containsi: searchTerm
-              }
-            }
-          ],
+          $or: productOrConditions,
           publishedAt: {
             $notNull: true
           },
@@ -97,13 +115,9 @@ export default {
         }
       });
 
-      // Search tags that match the query
+      // Search tags (всегда через textMatchConditions — без учёта регистра + для 1 буквы $startsWithi)
       const tags = await strapi.db.query('api::tag.tag').findMany({
-        where: {
-          title: {
-            $containsi: searchTerm
-          }
-        },
+        where: { $or: textMatchConditions('title', searchTerm) },
         populate: {
           products: {
             populate: {
@@ -128,14 +142,13 @@ export default {
         }
       });
 
-      // Get products that have matching tags
+      // Get products that have matching tags (несколько вариантов по регистру)
+      const tagTitleConditions = caseVariants(searchTerm).map((variant) => ({
+        tags: { title: { $containsi: variant } }
+      }));
       const productsByTags = await strapi.db.query('api::product.product').findMany({
         where: {
-          tags: {
-            title: {
-              $containsi: searchTerm
-            }
-          },
+          $or: tagTitleConditions,
           publishedAt: {
             $notNull: true
           },

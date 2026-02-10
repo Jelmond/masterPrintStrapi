@@ -21,28 +21,25 @@ export default {
             }
         });
 
-        // Оставляем только те продукты, которые относятся к нужной категории и видимы
-        const data = tags.map(tag => ({
-            title: tag.title,
-            products: (tag.products || [])
-                .filter(product => {
-                    // Фильтруем по категории
-                    const hasCategory = product.categories?.some(category => String(category.id) === String(id));
-                    if (!hasCategory) return false;
-                    
-                    // Фильтруем скрытые продукты на уровне приложения (гарантированно)
-                    // Скрываем только если явно isHidden: true или isActive: false
-                    if (product.isHidden === true) {
-                        return false;
-                    }
-                    if (product.isActive === false) {
-                        return false;
-                    }
-                    // Во всех остальных случаях показываем
-                    return true;
-                })
-        }));
+        // Оставляем только те продукты, которые относятся к нужной категории и видимы; дедупликация по id
+        const data = tags.map((tag: any) => {
+            const filtered = (tag.products || []).filter((product: any) => {
+                const hasCategory = product.categories?.some((c: any) => String(c.id) === String(id));
+                if (!hasCategory) return false;
+                if (product.isHidden === true || product.isActive === false) return false;
+                return true;
+            });
+            const byId = new Map();
+            for (const p of filtered) byId.set(p.id, p);
+            return { title: tag.title, products: Array.from(byId.values()) };
+        });
 
-        return { data };
+        // Уникальные продукты по id — для группировки по батчу без дублей на фронте
+        const uniqueById = new Map<number, any>();
+        for (const group of data) {
+            for (const p of group.products) uniqueById.set(p.id, p);
+        }
+
+        return { data, uniqueProducts: Array.from(uniqueById.values()) };
     }
 }

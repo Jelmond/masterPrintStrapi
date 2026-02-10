@@ -46,7 +46,12 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
         },
       },
     });
-    
+    // Дедупликация продуктов внутри каждого тега (join по связям даёт дубликаты)
+    for (const tag of tags as any[]) {
+      if (tag.products && Array.isArray(tag.products)) {
+        tag.products = Array.from(new Map(tag.products.map((p: any) => [p.id, p])).values());
+      }
+    }
     return { data: tags, meta: {} };
   },
   
@@ -96,7 +101,11 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
     if (!tag) {
       return ctx.notFound('Tag not found');
     }
-    
+    if ((tag as any).products && Array.isArray((tag as any).products)) {
+      (tag as any).products = Array.from(
+        new Map((tag as any).products.map((p: any) => [p.id, p])).values()
+      );
+    }
     return { data: tag };
   },
 }));

@@ -22,19 +22,13 @@
       return ctx.notFound('Category not found');
     }
 
-    // Фильтруем скрытые продукты на уровне приложения (гарантированно)
     if (entity.products && Array.isArray(entity.products)) {
-      entity.products = entity.products.filter((product: any) => {
-        // Скрываем только если явно isHidden: true или isActive: false
-        if (product.isHidden === true) {
-          return false;
-        }
-        if (product.isActive === false) {
-          return false;
-        }
-        // Во всех остальных случаях показываем
-        return true;
-      });
+      const byId = new Map<number, any>();
+      for (const product of entity.products) {
+        if (product.isHidden === true || product.isActive === false) continue;
+        byId.set(product.id, product);
+      }
+      entity.products = Array.from(byId.values());
     }
 
     return entity;

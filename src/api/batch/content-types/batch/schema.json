@@ -13,6 +13,11 @@
   "attributes": {
     "name": {
       "type": "string"
+    },
+    "priority": {
+      "type": "integer",
+      "default": 0,
+      "description": "Порядок отображения: меньше значение — выше в списке (1, 2, 3...)"
     }
   }
 }

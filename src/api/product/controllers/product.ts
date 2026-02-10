@@ -22,7 +22,7 @@ export default factories.createCoreController('api::product.product', ({ strapi 
     }
     
     // Запрашиваем все продукты (фильтрацию isHidden делаем на уровне приложения)
-    const products = await strapi.db.query('api::product.product').findMany({
+    const productsRaw = await strapi.db.query('api::product.product').findMany({
       where,
       populate: {
         batch: {
@@ -53,6 +53,10 @@ export default factories.createCoreController('api::product.product', ({ strapi 
         },
       },
     });
+    // Дедупликация по id: при фильтрах по связям (batch, category и т.д.) join может возвращать один продукт несколько раз
+    const products = Array.from(
+      new Map((productsRaw as any[]).map((p) => [p.id, p])).values()
+    );
     
     // Фильтруем результаты на уровне приложения (гарантированно скрываем isHidden: true)
     const visibleProducts = products.filter((product: any) => {
