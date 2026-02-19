@@ -9,10 +9,9 @@ export default {
             const totalCount = await strapi.db.query('api::product.product').count();
             console.log('Total products in database:', totalCount);
 
-            const products = await strapi.db.query('api::product.product').findMany({
+            const productsRaw = await strapi.db.query('api::product.product').findMany({
                 where: { 
-                    publishedAt: { $notNull: true },
-                    isHidden: false  // Only visible products
+                    publishedAt: { $notNull: true }
                 },
                 populate: {
                     images: true,
@@ -30,8 +29,15 @@ export default {
                     },
                     polishes: {
                         where: { publishedAt: { $notNull: true } }
-                    }
                 }
+            }
+        });
+
+            // Фильтруем скрытые продукты на уровне приложения
+            const products = productsRaw.filter((product: any) => {
+                if (product.isHidden === true) return false;
+                if (product.isActive === false) return false;
+                return true;
             });
 
             console.log('Products found:', products.length);
@@ -54,13 +60,12 @@ export default {
             return ctx.badRequest('No valid product slugs provided');
         }
 
-        // Get the source products to find their categories and tags (only published and active)
-        const sourceProducts = await strapi.db.query('api::product.product').findMany({
+        // Get the source products to find their categories and tags (фильтруем isHidden на уровне приложения)
+        const sourceProductsRaw = await strapi.db.query('api::product.product').findMany({
             where: {
                 slug: {
                     $in: productSlugs
-                },
-                isHidden: false  // Only visible products
+                }
             },
             populate: {
                 categories: {
@@ -70,6 +75,13 @@ export default {
                     where: { publishedAt: { $notNull: true } }
                 }
             }
+        });
+
+        // Фильтруем скрытые продукты на уровне приложения
+        const sourceProducts = sourceProductsRaw.filter((product: any) => {
+            if (product.isHidden === true) return false;
+            if (product.isActive === false) return false;
+            return true;
         });
 
         if (sourceProducts.length === 0) {
@@ -87,17 +99,14 @@ export default {
         // Get slugs of source products to exclude them
         const sourceProductSlugs = sourceProducts.map(p => p.slug);
 
-        // Find similar products that share categories or tags
-        const similarProducts = await strapi.db.query('api::product.product').findMany({
+        // Find similar products that share categories or tags (фильтруем isHidden на уровне приложения)
+        const similarProductsRaw = await strapi.db.query('api::product.product').findMany({
             where: {
                 $and: [
                     {
                         slug: {
                             $notIn: sourceProductSlugs // Exclude the source products
                         }
-                    },
-                    {
-                        isHidden: false  // Only visible products
                     },
                     {
                         $or: [
@@ -137,6 +146,13 @@ export default {
                     where: { publishedAt: { $notNull: true } }
                 }
             }
+        });
+
+        // Фильтруем скрытые продукты на уровне приложения
+        const similarProducts = similarProductsRaw.filter((product: any) => {
+            if (product.isHidden === true) return false;
+            if (product.isActive === false) return false;
+            return true;
         });
 
         // Ensure uniqueness by slug
