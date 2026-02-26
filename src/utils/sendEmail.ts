@@ -11,27 +11,102 @@ interface EmailOptions {
   from?: string;
 }
 
-const EMAIL_AUTO_MESSAGE = `
-<br><br>
-<div style="background-color: #f0f0f0; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0; border-radius: 5px;">
-  <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.6;">
-    <strong style="color: #ff6b6b; font-size: 15px;">⚠️ Это автоматическое письмо</strong><br>
-    <strong>Пожалуйста, не отвечайте на него</strong><br><br>
-    Если у вас возникли вопросы, мы с радостью поможем 😊<br>
-    Свяжитесь с нами через сайт или по контактам ниже.
-  </p>
-</div>
-`;
+// Цвета бренда для писем (inline styles для почтовых клиентов)
+const BRAND = {
+  primary: '#0f766e',
+  primaryLight: '#e6fffa',
+  text: '#1f2937',
+  textMuted: '#6b7280',
+  border: '#e5e7eb',
+  bg: '#f9fafb',
+  white: '#ffffff',
+};
 
-const EMAIL_FOOTER = `
-<br><br>
-С уважением, команда MPP.Shop<br>
-г. Гродно, ул. Титова 24<br>
-Время работы: Пн–Пт, 9:00–17:00<br>
-Тел.: +375 44 749-54-65<br>
-Сайт: <a href="https://mppshop.by">https://mppshop.by</a><br><br>
-Мы готовы помочь вам по любым вопросам, связанным с оформлением и оплатой заказа.
-`;
+/**
+ * Обёртка письма: контейнер 600px, шрифты, фон
+ */
+function emailLayout(content: string): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MPP.Shop</title>
+</head>
+<body style="margin:0; padding:0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 16px; line-height: 1.6; color: ${BRAND.text}; background-color: #f3f4f6;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f3f4f6;">
+    <tr>
+      <td align="center" style="padding: 32px 16px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; width: 100%; background-color: ${BRAND.white}; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden;">
+          <tr>
+            <td style="padding: 0;">
+              ${content}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/**
+ * Шапка письма с названием магазина
+ */
+function emailHeader(): string {
+  return `
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: linear-gradient(135deg, ${BRAND.primary} 0%, #134e4a 100%);">
+  <tr>
+    <td style="padding: 28px 32px; text-align: center;">
+      <span style="font-size: 22px; font-weight: 700; color: ${BRAND.white}; letter-spacing: -0.5px;">MPP.Shop</span>
+    </td>
+  </tr>
+</table>`;
+}
+
+/**
+ * Блок «это автоматическое письмо»
+ */
+function emailAutoMessage(): string {
+  return `
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top: 24px;">
+  <tr>
+    <td style="padding: 0 32px;">
+      <div style="background-color: ${BRAND.primaryLight}; border-left: 4px solid ${BRAND.primary}; padding: 16px 20px; border-radius: 0 8px 8px 0;">
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.text}; line-height: 1.6;">
+          <strong style="color: ${BRAND.primary};">Это автоматическое письмо.</strong> Пожалуйста, не отвечайте на него.<br>
+          По вопросам пишите нам через сайт или по контактам ниже.
+        </p>
+      </div>
+    </td>
+  </tr>
+</table>`;
+}
+
+/**
+ * Подвал с контактами
+ */
+function emailFooter(): string {
+  return `
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top: 32px; background-color: ${BRAND.bg};">
+  <tr>
+    <td style="padding: 24px 32px;">
+      <p style="margin: 0 0 8px 0; font-size: 15px; font-weight: 600; color: ${BRAND.text};">С уважением, команда MPP.Shop</p>
+      <p style="margin: 0; font-size: 14px; color: ${BRAND.textMuted}; line-height: 1.6;">
+        г. Гродно, ул. Титова 24<br>
+        Пн–Пт, 9:00–17:00<br>
+        Тел.: <a href="tel:+375447495465" style="color: ${BRAND.primary}; text-decoration: none;">+375 44 749-54-65</a><br>
+        Сайт: <a href="https://mppshop.by" style="color: ${BRAND.primary}; text-decoration: none;">mppshop.by</a>
+      </p>
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: ${BRAND.textMuted};">
+        По любым вопросам оформления и оплаты заказа — мы на связи.
+      </p>
+    </td>
+  </tr>
+</table>`;
+}
 
 // Initialize Resend client
 let resendClient: Resend | null = null;
@@ -97,31 +172,92 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
 }
 
 /**
- * Format order items list for email
+ * Формирует строки таблицы товаров для письма
  */
-function formatOrderItemsForEmail(orderItems: any[], subtotal: number = 0, discount: number = 0): string {
-  const discountPercentage = subtotal > 0 && discount > 0
-    ? discount / subtotal
-    : 0;
+function formatOrderItemsTable(orderItems: any[], subtotal: number = 0, discount: number = 0): string {
+  const discountPercentage = subtotal > 0 && discount > 0 ? discount / subtotal : 0;
 
-  const itemsList = orderItems
-    .map((item, index) => {
-      const productName = item.product?.title || `Product #${item.product?.id || 'N/A'}`;
-      
-      // Calculate discounted prices per product
-      let discountedUnitPrice = item.unitPrice;
-      let discountedTotalPrice = item.totalPrice;
-      
-      if (discountPercentage > 0) {
-        discountedUnitPrice = item.unitPrice * (1 - discountPercentage);
-        discountedTotalPrice = discountedUnitPrice * item.quantity;
-      }
-      
-      return `• ${productName} - ${item.quantity} шт. × ${discountedUnitPrice.toFixed(2)} BYN = ${discountedTotalPrice.toFixed(2)} BYN`;
-    })
-    .join('<br>');
+  const rows = orderItems.map((item) => {
+    const productName = item.product?.title || `Товар #${item.product?.id || '—'}`;
+    let discountedUnitPrice = item.unitPrice;
+    let discountedTotalPrice = item.totalPrice;
+    if (discountPercentage > 0) {
+      discountedUnitPrice = item.unitPrice * (1 - discountPercentage);
+      discountedTotalPrice = discountedUnitPrice * item.quantity;
+    }
+    return `
+      <tr>
+        <td style="padding: 12px 16px; border-bottom: 1px solid ${BRAND.border}; color: ${BRAND.text};">${escapeHtml(productName)}</td>
+        <td style="padding: 12px 16px; border-bottom: 1px solid ${BRAND.border}; text-align: center; color: ${BRAND.text};">${item.quantity}</td>
+        <td style="padding: 12px 16px; border-bottom: 1px solid ${BRAND.border}; text-align: right; color: ${BRAND.text};">${discountedUnitPrice.toFixed(2)} BYN</td>
+        <td style="padding: 12px 16px; border-bottom: 1px solid ${BRAND.border}; text-align: right; font-weight: 600; color: ${BRAND.text};">${discountedTotalPrice.toFixed(2)} BYN</td>
+      </tr>`;
+  }).join('');
 
-  return itemsList || 'Нет товаров';
+  if (!rows) {
+    return `<p style="margin: 0; color: ${BRAND.textMuted};">Нет товаров</p>`;
+  }
+
+  return `
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; font-size: 15px;">
+  <thead>
+    <tr style="background-color: ${BRAND.bg};">
+      <th style="padding: 12px 16px; text-align: left; font-weight: 600; color: ${BRAND.textMuted}; border-bottom: 2px solid ${BRAND.border};">Товар</th>
+      <th style="padding: 12px 16px; text-align: center; font-weight: 600; color: ${BRAND.textMuted}; border-bottom: 2px solid ${BRAND.border};">Кол-во</th>
+      <th style="padding: 12px 16px; text-align: right; font-weight: 600; color: ${BRAND.textMuted}; border-bottom: 2px solid ${BRAND.border};">Цена</th>
+      <th style="padding: 12px 16px; text-align: right; font-weight: 600; color: ${BRAND.textMuted}; border-bottom: 2px solid ${BRAND.border};">Сумма</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>`;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Блок тела письма: приветствие, текст, таблица заказа, итог
+ */
+function emailBody(params: {
+  greeting?: string;
+  message: string;
+  orderNumber: number;
+  orderItems: any[];
+  totalAmount: number;
+  subtotal: number;
+  discount: number;
+  showAutoMessage: boolean;
+}): string {
+  const itemsTable = formatOrderItemsTable(params.orderItems, params.subtotal, params.discount);
+  const greeting = params.greeting ?? 'Здравствуйте!';
+  return `
+${emailHeader()}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+  <tr>
+    <td style="padding: 32px 32px 0 32px;">
+      <p style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: ${BRAND.text};">${greeting}</p>
+      <p style="margin: 0 0 24px 0; font-size: 15px; color: ${BRAND.text}; line-height: 1.6;">${params.message}</p>
+      <p style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: ${BRAND.textMuted};">Заказ №${params.orderNumber}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 16px 32px 0 32px;">${itemsTable}</td>
+  </tr>
+  <tr>
+    <td style="padding: 24px 32px 0 32px;">
+      <p style="margin: 0; font-size: 17px; font-weight: 700; color: ${BRAND.primary};">
+        Итого: ${params.totalAmount.toFixed(2)} BYN
+      </p>
+    </td>
+  </tr>
+  ${params.showAutoMessage ? emailAutoMessage() : ''}
+  ${emailFooter()}
+</table>`;
 }
 
 /**
@@ -134,21 +270,18 @@ export function formatOrderCreatedEmailERIP(
   subtotal: number,
   discount: number = 0
 ): { subject: string; html: string } {
-  const itemsList = formatOrderItemsForEmail(orderItems, subtotal, discount);
-  
-  const html = `
-    <p>Здравствуйте!</p>
-    <p>Ваш заказ №${orderNumber} успешно создан. В ближайшее время менеджер подготовит и отправит вам письмо с данными для оплаты через ЕРИП или Расчётный счет.</p>
-    <p><b>Детали заказа:</b></p>
-    <p>${itemsList}</p>
-    <p><b>Итоговая сумма:</b> ${totalAmount.toFixed(2)} BYN</p>
-    ${EMAIL_AUTO_MESSAGE}
-    ${EMAIL_FOOTER}
-  `;
-
+  const body = emailBody({
+    message: 'Ваш заказ успешно создан. В ближайшее время менеджер подготовит и отправит вам письмо с данными для оплаты через ЕРИП или расчётный счёт.',
+    orderNumber,
+    orderItems,
+    totalAmount,
+    subtotal,
+    discount,
+    showAutoMessage: true,
+  });
   return {
     subject: `Ваш заказ №${orderNumber} успешно оформлен`,
-    html,
+    html: emailLayout(body),
   };
 }
 
@@ -162,21 +295,18 @@ export function formatOrderCreatedEmailSelfPickup(
   subtotal: number,
   discount: number = 0
 ): { subject: string; html: string } {
-  const itemsList = formatOrderItemsForEmail(orderItems, subtotal, discount);
-  
-  const html = `
-    <p>Здравствуйте!</p>
-    <p>Ваш заказ №${orderNumber} успешно создан и принят в обработку. Оплата будет произведена наличными или банковской картой при получении товара в нашем пункте выдачи.</p>
-    <p><b>Детали заказа:</b></p>
-    <p>${itemsList}</p>
-    <p><b>Итоговая сумма:</b> ${totalAmount.toFixed(2)} BYN</p>
-    ${EMAIL_AUTO_MESSAGE}
-    ${EMAIL_FOOTER}
-  `;
-
+  const body = emailBody({
+    message: 'Ваш заказ успешно создан и принят в обработку. Оплата — наличными или картой при получении в нашем пункте выдачи.',
+    orderNumber,
+    orderItems,
+    totalAmount,
+    subtotal,
+    discount,
+    showAutoMessage: true,
+  });
   return {
     subject: `Ваш заказ №${orderNumber} успешно оформлен`,
-    html,
+    html: emailLayout(body),
   };
 }
 
@@ -190,22 +320,18 @@ export function formatOrderPaidEmailAlphaBank(
   subtotal: number,
   discount: number = 0
 ): { subject: string; html: string } {
-  const itemsList = formatOrderItemsForEmail(orderItems, subtotal, discount);
-  
-  const html = `
-    <p>Здравствуйте!</p>
-    <p>Ваш платеж по заказу №${orderNumber} был успешно выполнен. Мы приняли заказ в работу и подготовим его к выдаче или отправке.</p>
-    <p><b>Детали заказа:</b></p>
-    <p>${itemsList}</p>
-    <p><b>Итоговая сумма:</b> ${totalAmount.toFixed(2)} BYN</p>
-    <p>Когда заказ будет готов, вы получите дополнительное уведомление.</p>
-    ${EMAIL_AUTO_MESSAGE}
-    ${EMAIL_FOOTER}
-  `;
-
+  const body = emailBody({
+    message: 'Платёж по заказу успешно выполнен. Мы приняли заказ в работу и подготовим его к выдаче или отправке. Когда заказ будет готов, вы получите дополнительное уведомление.',
+    orderNumber,
+    orderItems,
+    totalAmount,
+    subtotal,
+    discount,
+    showAutoMessage: true,
+  });
   return {
     subject: `Ваш заказ №${orderNumber} успешно оплачен`,
-    html,
+    html: emailLayout(body),
   };
 }
 
