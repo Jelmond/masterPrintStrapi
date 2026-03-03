@@ -220,6 +220,7 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         });
 
         if (email && orderWithItems) {
+          const orderDate = (orderWithItems as any)?.orderDate ?? (orderResult.order as any)?.orderDate;
           let emailContent;
           
           // Determine which email template to use
@@ -230,7 +231,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
               orderResult.orderItems,
               orderResult.totalAmount,
               orderResult.subtotal,
-              orderResult.discount
+              orderResult.discount,
+              orderDate
             );
           } else {
             // Scenario 1: ERIP or payment account (for organizations or individuals with ERIP)
@@ -239,7 +241,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
               orderResult.orderItems,
               orderResult.totalAmount,
               orderResult.subtotal,
-              orderResult.discount
+              orderResult.discount,
+              orderDate
             );
           }
 

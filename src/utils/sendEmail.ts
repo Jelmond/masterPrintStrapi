@@ -220,8 +220,29 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Формат даты для писем: дд.мм.гггг */
+function formatOrderDate(date: Date | string | null | undefined): string {
+  if (!date) return new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+/** Стилизованный блок «важно» / сроки в письме */
+function emailTermsBlock(html: string): string {
+  return `
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top: 20px;">
+  <tr>
+    <td style="padding: 0 32px;">
+      <div style="background-color: #fef3c7; border-left: 4px solid #d97706; padding: 16px 20px; border-radius: 0 8px 8px 0;">
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.text}; line-height: 1.6;">${html}</p>
+      </div>
+    </td>
+  </tr>
+</table>`;
+}
+
 /**
- * Блок тела письма: приветствие, текст, таблица заказа, итог
+ * Блок тела письма: приветствие, текст, номер заказа, таблица товаров, итог, блоки сроков, авто-сообщение, подвал
  */
 function emailBody(params: {
   greeting?: string;
@@ -232,9 +253,12 @@ function emailBody(params: {
   subtotal: number;
   discount: number;
   showAutoMessage: boolean;
+  /** Дополнительные блоки HTML (сроки оплаты/доставки) — вставляются после итога, до авто-сообщения */
+  termsBlocks?: string[];
 }): string {
   const itemsTable = formatOrderItemsTable(params.orderItems, params.subtotal, params.discount);
   const greeting = params.greeting ?? 'Здравствуйте!';
+  const termsHtml = (params.termsBlocks || []).join('');
   return `
 ${emailHeader()}
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
@@ -255,29 +279,37 @@ ${emailHeader()}
       </p>
     </td>
   </tr>
+  ${termsHtml}
   ${params.showAutoMessage ? emailAutoMessage() : ''}
   ${emailFooter()}
 </table>`;
 }
 
 /**
- * Email template 1: Order created with ERIP or payment account
+ * Email template 1: Order created with ERIP or payment account (онлайн / по счёту)
+ * В письме: номер заказа, состав заказа, порядок оплаты, срок оплаты (2 банковских дня), способы и сроки доставки.
  */
 export function formatOrderCreatedEmailERIP(
   orderNumber: number,
   orderItems: any[],
   totalAmount: number,
   subtotal: number,
-  discount: number = 0
+  discount: number = 0,
+  orderDate?: Date | string | null
 ): { subject: string; html: string } {
+  const dateStr = formatOrderDate(orderDate);
+  const paymentTerms = emailTermsBlock(
+    `Оплату (через ЕРИП / банковской картой (онлайн) / по выставленному счёту) необходимо произвести в течение 2 (двух) банковских дней с «${dateStr}». После истечения указанных сроков заказ аннулируется.`
+  );
   const body = emailBody({
-    message: 'Ваш заказ успешно создан. В ближайшее время менеджер подготовит и отправит вам письмо с данными для оплаты через ЕРИП или расчётный счёт.',
+    message: 'Ваш заказ успешно создан. В письме указаны номер заказа, информация о товарах, порядок оплаты и способы доставки. В ближайшее время менеджер подготовит и отправит вам данные для оплаты через ЕРИП, банковскую карту (онлайн) или по выставленному счёту.',
     orderNumber,
     orderItems,
     totalAmount,
     subtotal,
     discount,
     showAutoMessage: true,
+    termsBlocks: [paymentTerms],
   });
   return {
     subject: `Ваш заказ №${orderNumber} успешно оформлен`,
@@ -287,22 +319,29 @@ export function formatOrderCreatedEmailERIP(
 
 /**
  * Email template 2: Order created with self-pickup (cash/card on pickup)
+ * В письме: номер заказа, состав заказа, порядок оплаты (при получении), срок получения в пункте выдачи (2 банковских дня).
  */
 export function formatOrderCreatedEmailSelfPickup(
   orderNumber: number,
   orderItems: any[],
   totalAmount: number,
   subtotal: number,
-  discount: number = 0
+  discount: number = 0,
+  orderDate?: Date | string | null
 ): { subject: string; html: string } {
+  const dateStr = formatOrderDate(orderDate);
+  const deliveryTerms = emailTermsBlock(
+    `Получить товар в пункте выдачи необходимо в течение 2 (двух) банковских дней с «${dateStr}». В противном случае заказ аннулируется.`
+  );
   const body = emailBody({
-    message: 'Ваш заказ успешно создан и принят в обработку. Оплата — наличными или картой при получении в нашем пункте выдачи.',
+    message: 'Ваш заказ успешно создан и принят в обработку. В письме указаны номер заказа, информация о товарах и срок получения. Оплата — наличными или банковской картой при получении в нашем пункте выдачи.',
     orderNumber,
     orderItems,
     totalAmount,
     subtotal,
     discount,
     showAutoMessage: true,
+    termsBlocks: [deliveryTerms],
   });
   return {
     subject: `Ваш заказ №${orderNumber} успешно оформлен`,
