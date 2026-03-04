@@ -225,12 +225,21 @@ export function formatOrderMessage(
   }
   
   if (address.type) {
-    const shippingType = address.type === 'selfShipping' ? 'Самовывоз' : 'Доставка';
-    addressInfo += `<b>Тип доставки:</b> ${shippingType}\n`;
+    const shippingTypeMap: Record<string, string> = {
+      selfShipping: 'Самовывоз',
+      shipping: 'Доставка (DPD)',
+      belpochta: 'Белпочта',
+    };
+    addressInfo += `<b>Тип доставки:</b> ${shippingTypeMap[address.type] || address.type}\n`;
   }
-  
-  if (address.isIndividual !== undefined) {
-    addressInfo += `<b>Тип клиента:</b> ${address.isIndividual ? 'Физическое лицо' : 'Юридическое лицо'}\n`;
+
+  // Тип клиента: явно физлицо / юрлицо / самозанятый
+  if (address.isSelfEmployed === true) {
+    addressInfo += `<b>Тип клиента:</b> Самозанятый\n`;
+  } else if (address.isIndividual === true) {
+    addressInfo += `<b>Тип клиента:</b> Физическое лицо\n`;
+  } else if (address.isIndividual === false) {
+    addressInfo += `<b>Тип клиента:</b> Юридическое лицо\n`;
   }
   
   // Organization information (if not individual)

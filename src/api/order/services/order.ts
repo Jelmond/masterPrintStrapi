@@ -12,8 +12,9 @@ interface ProductInput {
 }
 
 interface AddressInput {
-  type?: 'selfShipping' | 'shipping';
+  type?: 'selfShipping' | 'shipping' | 'belpochta';
   isIndividual?: boolean;
+  isSelfEmployed?: boolean;
   fullName?: string;
   email?: string;
   phone?: string;
@@ -156,10 +157,12 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     }
     console.log('-'.repeat(80));
 
+    const addressType = (addressInput.type || 'shipping') as 'selfShipping' | 'shipping' | 'belpochta';
     const address = await strapi.entityService.create('api::address.address', {
       data: {
-        type: addressInput.type || 'shipping',
-        isIndividual: addressInput.isIndividual !== undefined ? addressInput.isIndividual : true,
+        type: addressType,
+        isIndividual: addressInput.isSelfEmployed ? false : (addressInput.isIndividual !== undefined ? addressInput.isIndividual : true),
+        isSelfEmployed: addressInput.isSelfEmployed === true,
         fullName: addressInput.fullName || null,
         email: addressInput.email || null,
         phone: addressInput.phone || null,
@@ -190,6 +193,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     let discountDescription = '';
 
     const shippingType = addressInput.type || 'shipping';
+    const isLegalEntity = addressInput.isIndividual === false || addressInput.isSelfEmployed === true;
 
     // Calculate base discount based on subtotal tiers
     if (subtotal >= 1500) {
@@ -204,36 +208,42 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
     }
 
     if (shippingType === 'shipping') {
-      // Calculate shipping cost based on subtotal
-      if (subtotal >= 400) {
-        shippingCost = 0; // Free shipping for orders >= 400 BYN
+      // DPD: для юрлиц/ИП всегда 0; для физлиц 0 при ≥400 BYN, иначе 20 BYN
+      if (isLegalEntity) {
+        shippingCost = 0;
+        if (subtotal < 200) {
+          throw new Error('Доставка DPD для юридических лиц и ИП доступна при сумме заказа от 200 BYN');
+        }
       } else {
-        shippingCost = 20; // 20 BYN shipping cost for orders < 400 BYN
+        if (subtotal >= 400) {
+          shippingCost = 0;
+        } else {
+          shippingCost = 20;
+        }
       }
-      
       discount = baseDiscount;
       totalAmount = subtotal - discount + shippingCost;
-      
-      console.log('📦 Shipping Type: DELIVERY');
+
+      console.log('📦 Shipping Type: DELIVERY (DPD)');
       console.log(`   Subtotal:      ${subtotal.toFixed(2)} BYN`);
       if (discount > 0) {
         console.log(`   Скидка (${discountDescription}): -${discount.toFixed(2)} BYN`);
       }
-      if (subtotal >= 400) {
-        console.log(`   Доставка:      Бесплатно (≥400 BYN)`);
+      if (shippingCost === 0) {
+        console.log(`   Доставка:      0 BYN${isLegalEntity ? ' (юрлицо/ИП)' : ' (≥400 BYN)'}`);
       } else {
         console.log(`   Shipping Cost: +${shippingCost.toFixed(2)} BYN`);
       }
       console.log(`   ─────────────────────────────────`);
       console.log(`   TOTAL:         ${totalAmount.toFixed(2)} BYN ✅`);
-      
-      strapi.log.info(`Shipping type: shipping - Base discount: ${discount.toFixed(2)} BYN (${discountDescription}), Shipping: ${shippingCost} BYN (Free: ${subtotal >= 400}). Subtotal: ${subtotal}, Total: ${totalAmount}`);
+
+      strapi.log.info(`Shipping type: shipping - Base discount: ${discount.toFixed(2)} BYN (${discountDescription}), Shipping: ${shippingCost} BYN. Subtotal: ${subtotal}, Total: ${totalAmount}`);
     } else if (shippingType === 'selfShipping') {
       // Apply base discount + additional 3% for self-pickup
       selfShippingDiscount = subtotal * 0.03; // Additional 3% for self-pickup
       discount = baseDiscount + selfShippingDiscount;
       totalAmount = subtotal - discount;
-      
+
       console.log('🏪 Shipping Type: SELF-PICKUP');
       console.log(`   Subtotal:      ${subtotal.toFixed(2)} BYN`);
       if (baseDiscount > 0) {
@@ -245,8 +255,24 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       console.log(`   Общая скидка:  -${discount.toFixed(2)} BYN`);
       console.log(`   ─────────────────────────────────`);
       console.log(`   TOTAL:         ${totalAmount.toFixed(2)} BYN ✅`);
-      
+
       strapi.log.info(`Shipping type: selfShipping - Base discount: ${baseDiscount.toFixed(2)} BYN (${discountDescription}), Self-pickup discount: ${selfShippingDiscount.toFixed(2)} BYN, Total discount: ${discount.toFixed(2)} BYN. Subtotal: ${subtotal}, Total: ${totalAmount}`);
+    } else if (shippingType === 'belpochta') {
+      // Белпочта: доставка 0 (оплата при получении), скидка 3% не применяется
+      shippingCost = 0;
+      discount = baseDiscount;
+      totalAmount = subtotal - discount;
+
+      console.log('📮 Shipping Type: БЕЛПОЧТА');
+      console.log(`   Subtotal:      ${subtotal.toFixed(2)} BYN`);
+      if (discount > 0) {
+        console.log(`   Скидка (${discountDescription}): -${discount.toFixed(2)} BYN`);
+      }
+      console.log(`   Доставка:      0 BYN (оплата при получении)`);
+      console.log(`   ─────────────────────────────────`);
+      console.log(`   TOTAL:         ${totalAmount.toFixed(2)} BYN ✅`);
+
+      strapi.log.info(`Shipping type: belpochta - Base discount: ${discount.toFixed(2)} BYN (${discountDescription}), Shipping: 0. Subtotal: ${subtotal}, Total: ${totalAmount}`);
     }
     console.log('='.repeat(80));
 

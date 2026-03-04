@@ -5,7 +5,7 @@
 export default {
   async calculatePrice(ctx) {
     try {
-      const { products, type, promocode } = ctx.request.body;
+      const { products, type, promocode, isIndividual, isSelfEmployed } = ctx.request.body;
 
       // Validate products
       if (!products || !Array.isArray(products) || products.length === 0) {
@@ -24,9 +24,11 @@ export default {
 
       // Validate shipping type
       const shippingType = type || 'shipping';
-      if (shippingType !== 'shipping' && shippingType !== 'selfShipping') {
-        return ctx.badRequest('Type must be either "shipping" or "selfShipping"');
+      if (shippingType !== 'shipping' && shippingType !== 'selfShipping' && shippingType !== 'belpochta') {
+        return ctx.badRequest('Type must be "shipping", "selfShipping" or "belpochta"');
       }
+      // Юрлицо или самозанятый: те же условия по доставке (DPD 0 и т.д.)
+      const isLegalEntity = isIndividual === false || isSelfEmployed === true;
 
       // Step 1: Fetch products and calculate subtotal
       let subtotal = 0;
@@ -87,19 +89,30 @@ export default {
       }
 
       if (shippingType === 'shipping') {
-        // Calculate shipping cost based on subtotal
-        if (subtotal >= 400) {
-          shippingCost = 0; // Free shipping for orders >= 400 BYN
+        // DPD для юрлиц/ИП — всегда 0. Для физлиц: 0 при ≥400 BYN, иначе 20 BYN
+        if (isLegalEntity) {
+          shippingCost = 0; // DPD для юридических лиц и ИП — бесплатно
+          if (subtotal < 200) {
+            return ctx.badRequest('Доставка DPD для юридических лиц и ИП доступна при сумме заказа от 200 BYN');
+          }
         } else {
-          shippingCost = 20; // 20 BYN shipping cost for orders < 400 BYN
+          if (subtotal >= 400) {
+            shippingCost = 0;
+          } else {
+            shippingCost = 20;
+          }
         }
-        
         discount = baseDiscount;
         totalAmount = subtotal - discount + shippingCost;
       } else if (shippingType === 'selfShipping') {
         // Apply base discount + additional 3% for self-pickup
         selfShippingDiscount = subtotal * 0.03; // Additional 3% for self-pickup
         discount = baseDiscount + selfShippingDiscount;
+        totalAmount = subtotal - discount;
+      } else if (shippingType === 'belpochta') {
+        // Белпочта: доставка 0 (оплата при получении), скидка 3% не применяется
+        shippingCost = 0;
+        discount = baseDiscount;
         totalAmount = subtotal - discount;
       }
 
@@ -167,8 +180,8 @@ export default {
         data: {
           products: productDetails,
           subtotal: parseFloat(subtotal.toFixed(2)),
-          shippingCost: shippingType === 'shipping' ? parseFloat(shippingCost.toFixed(2)) : 0,
-          freeShipping: shippingType === 'shipping' && subtotal >= 400, // Flag for free shipping
+          shippingCost: (shippingType === 'shipping' || shippingType === 'belpochta') ? parseFloat(shippingCost.toFixed(2)) : 0,
+          freeShipping: shippingType === 'shipping' && (subtotal >= 400 || isLegalEntity),
           discount: {
             baseDiscount: parseFloat(baseDiscount.toFixed(2)),
             selfShippingDiscount: shippingType === 'selfShipping' ? parseFloat(selfShippingDiscount.toFixed(2)) : 0,

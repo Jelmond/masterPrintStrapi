@@ -318,6 +318,34 @@ export function formatOrderCreatedEmailERIP(
 }
 
 /**
+ * Email template: заказ создан, оплата при получении (наличными или картой) — без текста про ЕРИП/расчётный счёт.
+ * Для физлиц: наличный расчёт или картой при получении (п.1 и п.2). Менеджер всё уточнит.
+ */
+export function formatOrderCreatedEmailPayOnReceipt(
+  orderNumber: number,
+  orderItems: any[],
+  totalAmount: number,
+  subtotal: number,
+  discount: number = 0,
+  orderDate?: Date | string | null
+): { subject: string; html: string } {
+  const body = emailBody({
+    message: 'Ваш заказ успешно создан и принят в обработку. В письме указаны номер заказа и информация о товарах. Оплата — наличными или банковской картой при получении. Менеджер свяжется с вами при необходимости.',
+    orderNumber,
+    orderItems,
+    totalAmount,
+    subtotal,
+    discount,
+    showAutoMessage: true,
+    termsBlocks: [],
+  });
+  return {
+    subject: `Ваш заказ №${orderNumber} успешно оформлен`,
+    html: emailLayout(body),
+  };
+}
+
+/**
  * Email template 2: Order created with self-pickup (cash/card on pickup)
  * В письме: номер заказа, состав заказа, порядок оплаты (при получении), срок получения в пункте выдачи (2 банковских дня).
  */

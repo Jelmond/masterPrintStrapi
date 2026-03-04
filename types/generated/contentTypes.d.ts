@@ -395,6 +395,7 @@ export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
     email: Schema.Attribute.String;
     fullName: Schema.Attribute.String;
     isIndividual: Schema.Attribute.Boolean;
+    isSelfEmployed: Schema.Attribute.Boolean;
     legalAddress: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -408,7 +409,7 @@ export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
     phone: Schema.Attribute.String;
     postalCode: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
-    type: Schema.Attribute.Enumeration<['selfShipping', 'shipping']>;
+    type: Schema.Attribute.Enumeration<['selfShipping', 'shipping', 'belpochta']>;
     UNP: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &

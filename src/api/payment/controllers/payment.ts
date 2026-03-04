@@ -3,7 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
-import { sendEmail, formatOrderCreatedEmailERIP, formatOrderCreatedEmailSelfPickup } from '../../../utils/sendEmail';
+import { sendEmail, formatOrderCreatedEmailERIP, formatOrderCreatedEmailSelfPickup, formatOrderCreatedEmailPayOnReceipt } from '../../../utils/sendEmail';
 
 /**
  * Helper function to restore stock for a cancelled order
@@ -85,6 +85,7 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         type,
         comment,
         isIndividual,
+        isSelfEmployed,
         fullName,
         email,
         phone,
@@ -122,16 +123,24 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         return ctx.badRequest('paymentMethod is required');
       }
 
-      // Validate payment method based on isIndividual
-      if (isIndividual) {
-        if (!['ERIP', 'card', 'pickupPayment'].includes(paymentMethod)) {
-          return ctx.badRequest('For individuals, paymentMethod must be ERIP, card, or pickupPayment');
+      // Самозанятый: способы оплаты и доставки как у юрлиц (ERIP, paymentAccount)
+      const isSelfEmployedBool = isSelfEmployed === true;
+
+      // Validate payment method: физлицо / юрлицо / самозанятый
+      if (isSelfEmployedBool) {
+        if (!['ERIP', 'paymentAccount'].includes(paymentMethod)) {
+          return ctx.badRequest('For self-employed, paymentMethod must be ERIP or paymentAccount');
         }
-        // Validate individual fields - accept either address (deprecated) or deliveryAddress
+        if (!fullName || !UNP || !paymentAccount || !bankAdress || !email || !phone || !city || !legalAddress || !deliveryAddress) {
+          return ctx.badRequest('For self-employed, fullName, UNP, paymentAccount, bankAdress, email, phone, city, legalAddress, and deliveryAddress are required');
+        }
+      } else if (isIndividual) {
+        if (!['ERIP', 'card', 'pickupPayment', 'cash'].includes(paymentMethod)) {
+          return ctx.badRequest('For individuals, paymentMethod must be ERIP, card, pickupPayment, or cash');
+        }
         if (!fullName || !email || !phone || !city || (!address && !deliveryAddress)) {
           return ctx.badRequest('For individuals, fullName, email, phone, city, and address (or deliveryAddress) are required');
         }
-        // pickupPayment is only valid for selfShipping
         if (paymentMethod === 'pickupPayment' && type !== 'selfShipping') {
           return ctx.badRequest('pickupPayment is only available for selfShipping (self-pickup)');
         }
@@ -139,9 +148,8 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         if (!['ERIP', 'paymentAccount'].includes(paymentMethod)) {
           return ctx.badRequest('For organizations, paymentMethod must be ERIP or paymentAccount');
         }
-        // Validate organization fields - require both legalAddress and deliveryAddress
-        if (!organization || !fullName || !UNP || !paymentAccount || !bankAdress || !email || !phone || !city || !legalAddress || !deliveryAddress) {
-          return ctx.badRequest('For organizations, organization, fullName, UNP, paymentAccount, bankAdress, email, phone, city, legalAddress, and deliveryAddress are required');
+        if (!fullName || !UNP || !paymentAccount || !bankAdress || !email || !phone || !city || !legalAddress || !deliveryAddress) {
+          return ctx.badRequest('For organizations, fullName, UNP, paymentAccount, bankAdress, email, phone, city, legalAddress, and deliveryAddress are required');
         }
       }
 
@@ -155,17 +163,18 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
         }
       }
 
-      // Prepare address data
+      // Prepare address data (юрлицо и самозанятый — одни и те же поля)
       const addressData = {
         type: type || 'shipping',
-        isIndividual,
+        isIndividual: isSelfEmployedBool ? false : isIndividual,
+        isSelfEmployed: isSelfEmployedBool,
         fullName,
         email,
         phone,
         city,
-        address: address || null, // Deprecated - for backward compatibility
-        deliveryAddress: deliveryAddress || address || null, // Use deliveryAddress or fall back to address
-        ...(isIndividual ? {} : {
+        address: address || null,
+        deliveryAddress: deliveryAddress || address || null,
+        ...(isIndividual && !isSelfEmployedBool ? {} : {
           organization,
           UNP,
           paymentAccount,
@@ -223,9 +232,9 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
           const orderDate = (orderWithItems as any)?.orderDate ?? (orderResult.order as any)?.orderDate;
           let emailContent;
           
-          // Determine which email template to use
-          if (type === 'selfShipping' || paymentMethod === 'pickupPayment') {
-            // Scenario 2: Self-pickup (cash/card on pickup) or pickupPayment
+          // Шаблон письма: 1–2 = наличный/карта при получении (без текста про ЕРИП/счёт), 3–4 = предоплата (ЕРИП/карта онлайн)
+          if (type === 'selfShipping' && paymentMethod === 'pickupPayment') {
+            // Самовывоз, оплата при получении — письмо со сроком 2 банковских дня
             emailContent = formatOrderCreatedEmailSelfPickup(
               orderResult.order.orderNumber,
               orderResult.orderItems,
@@ -234,8 +243,18 @@ export default factories.createCoreController('api::payment.payment', ({ strapi 
               orderResult.discount,
               orderDate
             );
+          } else if (paymentMethod === 'cash' || paymentMethod === 'pickupPayment') {
+            // Наличный или картой при получении — письмо без ЕРИП/расчётный счёт
+            emailContent = formatOrderCreatedEmailPayOnReceipt(
+              orderResult.order.orderNumber,
+              orderResult.orderItems,
+              orderResult.totalAmount,
+              orderResult.subtotal,
+              orderResult.discount,
+              orderDate
+            );
           } else {
-            // Scenario 1: ERIP or payment account (for organizations or individuals with ERIP)
+            // ERIP или карта онлайн (предоплата) — письмо с текстом про ЕРИП/счёт/онлайн
             emailContent = formatOrderCreatedEmailERIP(
               orderResult.order.orderNumber,
               orderResult.orderItems,

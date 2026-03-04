@@ -15,7 +15,8 @@
       "type": "enumeration",
       "enum": [
         "selfShipping",
-        "shipping"
+        "shipping",
+        "belpochta"
       ]
     },
     "organization": {
@@ -62,6 +63,10 @@
     },
     "isIndividual": {
       "type": "boolean"
+    },
+    "isSelfEmployed": {
+      "type": "boolean",
+      "description": "Самозанятый — способы оплаты и доставки как у юрлиц (ERIP, paymentAccount; DPD 0)"
     }
   }
 }
