@@ -32,6 +32,7 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
               }
             },
             images: true,
+            preview: true,
             categories: {
               where: {
                 publishedAt: { $notNull: true }
@@ -83,6 +84,7 @@ export default factories.createCoreController('api::tag.tag', ({ strapi }) => ({
               }
             },
             images: true,
+            preview: true,
             categories: {
               where: {
                 publishedAt: { $notNull: true }

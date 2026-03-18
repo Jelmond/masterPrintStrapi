@@ -409,7 +409,9 @@ export interface ApiAddressAddress extends Struct.CollectionTypeSchema {
     phone: Schema.Attribute.String;
     postalCode: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
-    type: Schema.Attribute.Enumeration<['selfShipping', 'shipping', 'belpochta']>;
+    type: Schema.Attribute.Enumeration<
+      ['selfShipping', 'shipping', 'belpochta']
+    >;
     UNP: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -609,7 +611,7 @@ export interface ApiPaymentPayment extends Struct.CollectionTypeSchema {
     order: Schema.Attribute.Relation<'oneToOne', 'api::order.order'>;
     paymentDate: Schema.Attribute.DateTime;
     paymentMethod: Schema.Attribute.Enumeration<
-      ['paymentAccount', 'ERIP', 'card', 'pickupPayment']
+      ['cash', 'paymentAccount', 'ERIP', 'card', 'pickupPayment']
     >;
     paymentStatus: Schema.Attribute.Enumeration<
       ['pending', 'declined', 'success', 'refunded']
@@ -692,6 +694,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     material: Schema.Attribute.String;
     oldPrice: Schema.Attribute.Decimal;
     polishes: Schema.Attribute.Relation<'oneToMany', 'api::polish.polish'>;
+    preview: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     price: Schema.Attribute.Decimal;
     publishedAt: Schema.Attribute.DateTime;
     quantityInPack: Schema.Attribute.Integer;

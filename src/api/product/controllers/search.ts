@@ -59,6 +59,7 @@ export default {
             },
             populate: {
               images: true,
+              preview: true,
               categories: {
                 where: { publishedAt: { $notNull: true } }
               },
@@ -97,6 +98,7 @@ export default {
         },
         populate: {
           images: true,
+          preview: true,
           categories: {
             where: { publishedAt: { $notNull: true } }
           },
@@ -122,6 +124,7 @@ export default {
           products: {
             populate: {
               images: true,
+              preview: true,
               categories: {
                 where: { publishedAt: { $notNull: true } }
               },
@@ -156,6 +159,7 @@ export default {
         },
         populate: {
           images: true,
+          preview: true,
           categories: {
             where: { publishedAt: { $notNull: true } }
           },

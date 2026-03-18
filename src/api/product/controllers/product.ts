@@ -41,6 +41,7 @@ export default factories.createCoreController('api::product.product', ({ strapi 
           }
         },
         images: true,
+        preview: true,
         categories: {
           where: {
             publishedAt: { $notNull: true }
@@ -100,6 +101,7 @@ export default factories.createCoreController('api::product.product', ({ strapi 
           }
         },
         images: true,
+        preview: true,
         categories: {
           where: {
             publishedAt: { $notNull: true }

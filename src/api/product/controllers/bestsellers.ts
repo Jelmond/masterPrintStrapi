@@ -15,6 +15,7 @@ export default {
         },
         populate: {
           images: true,
+          preview: true,
           categories: {
             where: { publishedAt: { $notNull: true } }
           },

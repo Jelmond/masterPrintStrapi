@@ -80,6 +80,7 @@ function formatPaymentMethodName(paymentMethod: string): string {
     'card': 'Карта (AlphaBank)',
     'paymentAccount': 'Расчетный счет',
     'pickupPayment': 'Самовывоз (наличные/карта)',
+    'cash': 'Наличные',
     'selfShipping': 'Самовывоз (наличные/карта)',
   };
   return methodMap[paymentMethod] || paymentMethod;
@@ -291,7 +292,7 @@ export function formatPaymentSuccessMessage(order: any, payment: any): string {
 
 <b>Номер заказа:</b> #${order.orderNumber}
 <b>Сумма платежа:</b> ${payment.amount} BYN
-<b>Способ оплаты:</b> ${payment.paymentMethod === 'card' ? 'Карта' : payment.paymentMethod}
+<b>Способ оплаты:</b> ${formatPaymentMethodName(payment.paymentMethod)}
 <b>Hash ID:</b> ${payment.hashId}
 <b>Дата платежа:</b> ${payment.paymentDate ? new Date(payment.paymentDate).toLocaleString('ru-RU') : 'N/A'}
 
@@ -308,7 +309,7 @@ export function formatPaymentFailureMessage(order: any, payment: any): string {
 
 <b>Номер заказа:</b> #${order.orderNumber}
 <b>Сумма платежа:</b> ${payment.amount} BYN
-<b>Способ оплаты:</b> ${payment.paymentMethod === 'card' ? 'Карта' : payment.paymentMethod}
+<b>Способ оплаты:</b> ${formatPaymentMethodName(payment.paymentMethod)}
 <b>Hash ID:</b> ${payment.hashId}
 <b>Статус:</b> ${payment.paymentStatus}
 

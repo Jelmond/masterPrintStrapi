@@ -38,7 +38,7 @@ export default {
         // Fetch product by slug (then check isHidden in code)
         const product = await strapi.db.query('api::product.product').findOne({
           where: { slug: productInput.productSlug },
-          populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
+          populate: ['batch', 'designers', 'polishes', 'images', 'preview', 'categories', 'tags'],
         });
 
         if (!product) {

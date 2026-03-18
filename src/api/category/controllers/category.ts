@@ -32,6 +32,7 @@ export default factories.createCoreController('api::category.category', ({ strap
               }
             },
             images: true,
+            preview: true,
             categories: {
               where: {
                 publishedAt: { $notNull: true }
@@ -92,6 +93,7 @@ export default factories.createCoreController('api::category.category', ({ strap
               }
             },
             images: true,
+            preview: true,
             categories: {
               where: {
                 publishedAt: { $notNull: true }

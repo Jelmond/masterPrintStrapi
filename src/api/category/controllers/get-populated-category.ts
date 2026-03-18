@@ -11,7 +11,7 @@
       populate: {
         products: {
           // БЕЗ фильтра isHidden в where - фильтруем на уровне приложения
-          populate: ['images', 'category', 'tags', 'batch', 'designers', 'polishes']
+          populate: ['images', 'preview', 'category', 'tags', 'batch', 'designers', 'polishes']
         }
       }
     });

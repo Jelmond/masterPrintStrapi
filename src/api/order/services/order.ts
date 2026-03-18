@@ -71,7 +71,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }) => (
       // Fetch product by slug (then check isHidden in code to avoid DB column issues)
       const product = await strapi.db.query('api::product.product').findOne({
         where: { slug: productInput.productSlug },
-        populate: ['batch', 'designers', 'polishes', 'images', 'categories', 'tags'],
+        populate: ['batch', 'designers', 'polishes', 'images', 'preview', 'categories', 'tags'],
       });
 
       if (!product) {
