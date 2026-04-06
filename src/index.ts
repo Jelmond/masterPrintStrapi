@@ -1,5 +1,27 @@
 import type { Core } from '@strapi/strapi';
 
+/**
+ * SQLite's built-in lower() only handles ASCII, so $containsi breaks for Cyrillic.
+ * We override it with a JS function that calls String#toLowerCase (full Unicode support).
+ * This is a no-op on PostgreSQL/MySQL where the driver handles it natively.
+ */
+async function patchSqliteUnicodeLower(strapi: Core.Strapi) {
+  const knex = strapi.db.connection as any;
+  const clientName: string = knex?.client?.config?.client ?? '';
+  if (!clientName.includes('sqlite')) return;
+
+  try {
+    const conn = await knex.client.acquireConnection();
+    conn.function('lower', { deterministic: true }, (s: unknown) =>
+      s == null ? null : String(s).toLowerCase()
+    );
+    knex.client.releaseConnection(conn);
+    strapi.log.info('[sqlite] Registered Unicode-aware lower() — Cyrillic $containsi now works correctly');
+  } catch (err: any) {
+    strapi.log.warn('[sqlite] Could not register Unicode lower():', err?.message ?? err);
+  }
+}
+
 async function setupTelegramWebhook(strapi: Core.Strapi) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL;
@@ -64,6 +86,7 @@ export default {
    * run jobs, or perform some special logic.
    */
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    await patchSqliteUnicodeLower(strapi);
     // Setup Telegram webhook automatically on server start
     await setupTelegramWebhook(strapi);
   },

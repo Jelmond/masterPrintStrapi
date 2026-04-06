@@ -18,8 +18,9 @@ const PRODUCT_FIELDS = ['title', 'articul', 'slug', 'material', 'size'] as const
 function normalizeSearchTerm(raw: unknown): string {
   const str = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
   const s = String(str).trim();
-  // Убираем типографские кавычки из самого термина, чтобы «Конверты» → Конверты
-  return s.replace(/[«»""'']/g, '').replace(/\s+/g, ' ').normalize('NFC');
+  // Убираем типографские кавычки; приводим к нижнему регистру в JS, потому что
+  // SQLite LIKE не умеет игнорировать регистр для кириллицы (только ASCII).
+  return s.replace(/[«»""'']/g, '').replace(/\s+/g, ' ').normalize('NFC').toLowerCase();
 }
 
 /**
