@@ -18,20 +18,26 @@ const PRODUCT_FIELDS = ['title', 'articul', 'slug', 'material', 'size'] as const
 function normalizeSearchTerm(raw: unknown): string {
   const str = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
   const s = String(str).trim();
-  return s.replace(/\s+/g, ' ').normalize('NFC');
-}
-
-/** Символы % _ \ ломают SQL LIKE. */
-function safeLikeToken(token: string): string {
-  return token.replace(/[%_\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Убираем типографские кавычки из самого термина, чтобы «Конверты» → Конверты
+  return s.replace(/[«»""'']/g, '').replace(/\s+/g, ' ').normalize('NFC');
 }
 
 /**
- * Слова запроса: пробелы, запятые, точки с запятой, слэши, плюсы, дефисы и типографские тире.
+ * Символ % ломает SQL LIKE (матчит что угодно). \ — escape-символ.
+ * _ оставляем: в LIKE он матчит любой одиночный символ, что приемлемо для поиска
+ * и позволяет найти артикулы вида pasha_1 по запросу «pasha_1».
+ */
+function safeLikeToken(token: string): string {
+  return token.replace(/[%\\]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Слова запроса: пробелы, запятые, точки с запятой, слэши, плюсы, дефисы, типографские тире,
+ * а также типографские кавычки «»""'' — чтобы запрос «Конверты» давал токен «Конверты».
  */
 function tokenizeSearch(term: string): string[] {
   return term
-    .split(/[\s\u00A0,;|/\\+–—\-]+/u)
+    .split(/[\s\u00A0,;|/\\+–—\-«»""'']+/u)
     .map((t) => t.normalize('NFC').trim())
     .filter(Boolean)
     .map(safeLikeToken)
