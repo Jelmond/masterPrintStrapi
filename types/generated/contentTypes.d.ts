@@ -461,7 +461,9 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    icon: Schema.Attribute.Enumeration<['cards', 'box', 'convert', 'stickers']>;
+    icon: Schema.Attribute.Enumeration<
+      ['cards', 'box', 'convert', 'stickers', 'kashpo']
+    >;
     image: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',
       true
