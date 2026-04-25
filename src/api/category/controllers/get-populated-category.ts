@@ -1,22 +1,25 @@
  export default { 
  async getPopulatedCategory(ctx) {
-    console.log('ctx', ctx.params)
+   const { slug } = ctx.params;
 
-    const { id } = ctx.params;
+   if (!slug) {
+    return ctx.badRequest('Category slug is required');
+   }
 
-    console.log('id', id)
+   const isNumericId = /^\d+$/.test(String(slug));
+   const where = isNumericId
+    ? { id: typeof slug === 'string' ? parseInt(slug, 10) : slug }
+    : { slug: String(slug) };
 
     const entity = await strapi.db.query('api::category.category').findOne({
-      where: { id },
+      where,
       populate: {
         products: {
           // БЕЗ фильтра isHidden в where - фильтруем на уровне приложения
-          populate: ['images', 'preview', 'category', 'tags', 'batch', 'designers', 'polishes']
+          populate: ['images', 'preview', 'categories', 'tags', 'batch', 'designers', 'polishes']
         }
       }
     });
-
-    console.log('entity', entity);
 
     if (!entity) {
       return ctx.notFound('Category not found');

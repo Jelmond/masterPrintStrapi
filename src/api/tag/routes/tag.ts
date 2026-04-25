@@ -2,7 +2,7 @@ export default {
     routes: [
       {
         method: "GET",
-        path: "/getTagsForCategory/:id",
+        path: "/getTagsForCategory/:slug",
         handler: "get-tags-for-category.getTagsForCategory",
         // config: {
         //   policies: ["global::is-authenticated"],

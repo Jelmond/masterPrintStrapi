@@ -6,11 +6,8 @@ import { factories } from '@strapi/strapi'
 
 export default factories.createCoreController('api::category.category', ({ strapi }) => ({
   async find(ctx) {
-    // Use db.query to filter products and their relations by publishedAt
+    // Use db.query to filter products and their relations
     const categories = await strapi.db.query('api::category.category').findMany({
-      where: {
-        publishedAt: { $notNull: true }
-      },
       populate: {
         image: true,
         products: {
@@ -66,12 +63,18 @@ export default factories.createCoreController('api::category.category', ({ strap
   
   async findOne(ctx) {
     const { id } = ctx.params;
-    
+
+    if (!id) {
+      return ctx.badRequest('Category ID or slug is required');
+    }
+
+    const isNumericId = /^\d+$/.test(String(id));
+    const where = isNumericId
+      ? { id: typeof id === 'string' ? parseInt(id, 10) : id }
+      : { slug: String(id) };
+
     const category = await strapi.db.query('api::category.category').findOne({
-      where: {
-        id: typeof id === 'string' ? parseInt(id) : id,
-        publishedAt: { $notNull: true }
-      },
+      where,
       populate: {
         image: true,
         products: {

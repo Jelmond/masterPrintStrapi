@@ -1,15 +1,20 @@
 export default {
     async getTagsForCategory(ctx) {
-        const { id } = ctx.params;
-
-        console.log('id', id)
+        const { slug } = ctx.params;
+        if (!slug) {
+            return ctx.badRequest('Category slug is required');
+        }
+        const isNumericId = /^\d+$/.test(String(slug));
+        const categoryFilter = isNumericId
+            ? { id: typeof slug === 'string' ? parseInt(slug, 10) : slug }
+            : { slug: String(slug) };
 
         // Получаем все теги, у которых есть продукты с нужной категорией
         const tags = await strapi.db.query('api::tag.tag').findMany({
             where: {
                 products: {
                     categories: {
-                        id: id
+                        ...categoryFilter
                     }
                 }
             },
@@ -24,7 +29,9 @@ export default {
         // Оставляем только те продукты, которые относятся к нужной категории и видимы; дедупликация по id
         const data = tags.map((tag: any) => {
             const filtered = (tag.products || []).filter((product: any) => {
-                const hasCategory = product.categories?.some((c: any) => String(c.id) === String(id));
+                const hasCategory = product.categories?.some((c: any) =>
+                    isNumericId ? String(c.id) === String(slug) : String(c.slug) === String(slug)
+                );
                 if (!hasCategory) return false;
                 if (product.isHidden === true || product.isActive === false) return false;
                 return true;

@@ -46,6 +46,11 @@
         "stickers",
         "kashpo"
       ]
+    },
+    "slug": {
+      "type": "string",
+      "unique": true,
+      "required": true
     }
   }
 }
