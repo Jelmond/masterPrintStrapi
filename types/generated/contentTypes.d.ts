@@ -785,7 +785,7 @@ export interface ApiSaleSale extends Struct.CollectionTypeSchema {
     singularName: 'sale';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
@@ -797,6 +797,34 @@ export interface ApiSaleSale extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String;
     priority: Schema.Attribute.Integer;
     publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiSalesPageSalesPage extends Struct.SingleTypeSchema {
+  collectionName: 'sales_pages';
+  info: {
+    displayName: 'SalesPage';
+    pluralName: 'sales-pages';
+    singularName: 'sales-page';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::sales-page.sales-page'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    sale: Schema.Attribute.Component<'sales.sale', true>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1353,6 +1381,7 @@ declare module '@strapi/strapi' {
       'api::product.product': ApiProductProduct;
       'api::promocode.promocode': ApiPromocodePromocode;
       'api::sale.sale': ApiSaleSale;
+      'api::sales-page.sales-page': ApiSalesPageSalesPage;
       'api::tag.tag': ApiTagTag;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;

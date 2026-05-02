@@ -1,0 +1,21 @@
+{
+  "collectionName": "components_sales_sales",
+  "info": {
+    "displayName": "sale",
+    "description": ""
+  },
+  "options": {},
+  "attributes": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "richtext"
+    },
+    "sale": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::sale.sale"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "kind": "singleType",
+  "collectionName": "sales_pages",
+  "info": {
+    "singularName": "sales-page",
+    "pluralName": "sales-pages",
+    "displayName": "SalesPage"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "sale": {
+      "displayName": "sale",
+      "type": "component",
+      "repeatable": true,
+      "component": "sales.sale"
+    }
+  }
+}

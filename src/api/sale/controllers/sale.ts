@@ -6,15 +6,15 @@ import { factories } from '@strapi/strapi';
 
 export default factories.createCoreController('api::sale.sale', ({ strapi }) => ({
   /**
-   * Продукты в акции: только isOnSale + выбранная опубликованная sale.
+   * Продукты в акции: isOnSale + связь с sale (у sale нет draft/publish, как у product).
    * Ответ: массив групп, отсортированных по sale.priority (меньше — выше, как у batch).
    */
   async groupedOnSale(ctx) {
     try {
+      // Без isHidden в where — как в product/category (иначе продукты с isHidden null не попадают в выборку).
       const products = await strapi.db.query('api::product.product').findMany({
         where: {
           isOnSale: true,
-          isHidden: false,
         },
         populate: {
           sale: true,
@@ -29,12 +29,10 @@ export default factories.createCoreController('api::sale.sale', ({ strapi }) => 
         orderBy: { id: 'asc' },
       });
 
-      const list = (products as any[]).filter(
-        (p) =>
-          p.sale &&
-          p.sale.id != null &&
-          p.sale.publishedAt != null
-      );
+      const list = (products as any[]).filter((p) => {
+        if (p.isHidden === true || p.isActive === false) return false;
+        return p.sale && p.sale.id != null;
+      });
 
       const bySale = new Map<
         number,
