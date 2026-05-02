@@ -731,6 +731,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     price: Schema.Attribute.Decimal;
     publishedAt: Schema.Attribute.DateTime;
     quantityInPack: Schema.Attribute.Integer;
+    sale: Schema.Attribute.Relation<'oneToOne', 'api::sale.sale'>;
     size: Schema.Attribute.String;
     slug: Schema.Attribute.String;
     stock: Schema.Attribute.Integer;
@@ -773,6 +774,32 @@ export interface ApiPromocodePromocode extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     usages: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
     validUntil: Schema.Attribute.DateTime;
+  };
+}
+
+export interface ApiSaleSale extends Struct.CollectionTypeSchema {
+  collectionName: 'sales';
+  info: {
+    displayName: 'Sale';
+    pluralName: 'sales';
+    singularName: 'sale';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::sale.sale'> &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String;
+    priority: Schema.Attribute.Integer;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1325,6 +1352,7 @@ declare module '@strapi/strapi' {
       'api::polish.polish': ApiPolishPolish;
       'api::product.product': ApiProductProduct;
       'api::promocode.promocode': ApiPromocodePromocode;
+      'api::sale.sale': ApiSaleSale;
       'api::tag.tag': ApiTagTag;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;
